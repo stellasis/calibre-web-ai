@@ -1,0 +1,120 @@
+# Workflow Status
+# This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
+# Implementation phase is tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "2025-01-27"
+project: "calibre-web-ai"
+project_type: "web-application"
+selected_track: "bmad-method"
+field_type: "brownfield"
+workflow_path: ".bmad/bmm/workflows/workflow-status/paths/method-brownfield.yaml"
+
+workflow_status:
+  # Prerequisite: Documentation
+  document-project:
+    status: "docs/index.md"
+    agent: "analyst"
+    command: "document-project"
+    phase: "prerequisite"
+    note: "Understand existing codebase before planning"
+
+  # Phase 0: Discovery (Optional)
+  brainstorm-project:
+    status: "skipped"
+    agent: "analyst"
+    command: "brainstorm-project"
+    phase: 0
+    note: "Optional discovery workflow - skipped"
+
+  research:
+    status: "skipped"
+    agent: "analyst"
+    command: "research"
+    phase: 0
+    note: "Optional discovery workflow - skipped"
+
+  product-brief:
+    status: "skipped"
+    agent: "analyst"
+    command: "product-brief"
+    phase: 0
+    note: "Optional discovery workflow - skipped"
+
+  # Phase 1: Planning
+  prd:
+    status: "docs/prd.md"
+    agent: "pm"
+    command: "prd"
+    phase: 1
+    note: "PRD already exists"
+
+  validate-prd:
+    status: "docs/validation-report-prd-2025-01-27.md"
+    agent: "pm"
+    command: "validate-prd"
+    phase: 1
+    note: "PRD validation complete - 82% pass rate, approved with recommendations"
+
+  create-ux-design:
+    status: "conditional"
+    agent: "ux-designer"
+    command: "create-ux-design"
+    phase: 1
+    note: "Required if project has UI - this project has UI, should be completed"
+
+  # Phase 2: Solutioning
+  create-architecture:
+    status: "docs/architecture.md"
+    agent: "architect"
+    command: "create-architecture"
+    phase: 2
+    note: "Architecture complete - 8 steps, all decisions documented, validated and ready for implementation"
+
+  create-epics-and-stories:
+    status: "required"
+    agent: "pm"
+    command: "create-epics-and-stories"
+    phase: 2
+    note: "Required: Break down PRD into implementable epics and stories with full context (PRD + UX + Architecture)"
+
+  test-design:
+    status: "recommended"
+    agent: "tea"
+    command: "test-design"
+    phase: 2
+    note: "Testability assessment before gate check - auto-detects system-level mode"
+
+  validate-architecture:
+    status: "optional"
+    agent: "architect"
+    command: "validate-architecture"
+    phase: 2
+    note: "Optional architecture validation"
+
+  implementation-readiness:
+    status: "required"
+    agent: "architect"
+    command: "implementation-readiness"
+    phase: 2
+    note: "Validates PRD + UX + Architecture + Epics cohesion before implementation"
+
+  # Phase 3: Implementation
+  sprint-planning:
+    status: "required"
+    agent: "sm"
+    command: "sprint-planning"
+    phase: 3
+    note: "Creates sprint plan with stories"
+
