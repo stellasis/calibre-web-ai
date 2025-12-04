@@ -1,0 +1,73 @@
+# generated: 2025-12-04
+# project: calibre-web-ai
+# project_key: calibre-web-ai
+# tracking_system: file-system
+# story_location: docs/sprint-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic exists in epic file but not contexted
+#   - contexted: Epic tech context created (required before drafting stories)
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved and story context created
+#   - in-progress: Developer actively working on implementation
+#   - review: Under SM review (via code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epics should be 'contexted' before stories can be 'drafted'
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically drafts next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
+
+generated: 2025-12-04
+project: calibre-web-ai
+project_key: calibre-web-ai
+tracking_system: file-system
+story_location: docs/sprint-artifacts
+
+development_status:
+  # Epic 1: Foundation Setup
+  epic-1: contexted
+  1-1-database-schema-and-models: done
+  1-2-sqlite-vss-extension-setup: done
+  1-3-configuration-management-infrastructure: done
+  1-4-text-extraction-service: done
+  1-5-background-task-base-infrastructure: done
+  epic-1-retrospective: optional
+  
+  # Epic 2: AI Summary Feature
+  epic-2: backlog
+  2-1-ai-summarization-service: backlog
+  2-2-background-task-for-summary-generation: backlog
+  2-3-api-endpoint-for-summary-generation: backlog
+  2-4-ui-integration-for-summary-generation: backlog
+  epic-2-retrospective: optional
+  
+  # Epic 3: AI Semantic Search
+  epic-3: backlog
+  3-1-embedding-generation-service: backlog
+  3-2-semantic-search-service: backlog
+  3-3-search-route-integration-and-ui: backlog
+  epic-3-retrospective: optional
+  
+  # Epic 4: Similar Books Recommendations
+  epic-4: backlog
+  4-1-similar-books-api-endpoint: backlog
+  4-2-similar-books-ui-integration: backlog
+  epic-4-retrospective: optional
+  
+  # Epic 5: Configuration UI
+  epic-5: backlog
+  5-1-admin-configuration-display: backlog
+  5-2-admin-configuration-edit-page: backlog
+  epic-5-retrospective: optional

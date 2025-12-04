@@ -68,7 +68,7 @@ workflow_status:
     note: "PRD validation complete - 82% pass rate, approved with recommendations"
 
   create-ux-design:
-    status: "conditional"
+    status: "docs/ux-integration-guide.md"
     agent: "ux-designer"
     command: "create-ux-design"
     phase: 1
@@ -83,7 +83,7 @@ workflow_status:
     note: "Architecture complete - 8 steps, all decisions documented, validated and ready for implementation"
 
   create-epics-and-stories:
-    status: "required"
+    status: "docs/epics.md"
     agent: "pm"
     command: "create-epics-and-stories"
     phase: 2
@@ -104,7 +104,7 @@ workflow_status:
     note: "Optional architecture validation"
 
   implementation-readiness:
-    status: "required"
+    status: "docs/implementation-readiness-report-2025-01-27.md"
     agent: "architect"
     command: "implementation-readiness"
     phase: 2

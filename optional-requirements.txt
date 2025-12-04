@@ -45,3 +45,7 @@ comicapi>=2.2.0,<3.3.0
 
 # Kobo integration
 jsonschema>=3.2.0,<4.24.0
+
+# File type validation (optional - has Windows compatibility issues with python-magic-bin)
+python-magic>=0.4.27,<0.5.0
+python-magic-bin>=0.4.0,<0.5.0;sys_platform=='win32'
