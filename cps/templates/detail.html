@@ -280,6 +280,199 @@
                 </div>
             {% endif %}
 
+            {# Edit Metadata Button - moved above AI section for better UX #}
+            {% if current_user.role_edit() %}
+                <div style="margin-top: 15px; margin-bottom: 15px;">
+                    <div class="btn-group" role="group" aria-label="Edit/Delete book">
+                        <a href="{{ url_for('edit-book.show_edit_book', book_id=entry.id) }}"
+                           class="btn btn-sm btn-primary" id="edit_book" role="button"><span
+                                class="glyphicon glyphicon-edit"></span> {{ _('Edit Metadata') }}</a>
+                    </div>
+                </div>
+            {% endif %}
+
+            {# AI Summary Section (Story 2.4) #}
+            {% if config.config_ai_enabled %}
+                <div class="ai-summary-section" style="margin-top: 20px; margin-bottom: 20px;">
+                    {# AI Status Indicators #}
+                    <div class="ai-status-indicators" style="margin-bottom: 15px; display: flex; gap: 4px;">
+                        <span class="label {% if ai_summary %}label-success{% else %}label-default{% endif %}" 
+                              data-toggle="tooltip" 
+                              title="{% if ai_summary %}{{ _('AI summary has been generated for this book') }}{% else %}{{ _('No AI summary yet - click Generate to create one') }}{% endif %}">
+                            <span class="glyphicon glyphicon-{% if ai_summary %}ok{% else %}minus{% endif %}"></span>
+                            {{ _('Summary') }}
+                        </span>
+                        <span class="label {% if has_embedding %}label-success{% else %}label-default{% endif %}" 
+                              id="embedding-status-badge"
+                              data-toggle="tooltip" 
+                              title="{% if has_embedding %}{{ _('Book is indexed for AI Search') }}{% else %}{{ _('Not indexed - generate a summary to enable AI Search') }}{% endif %}">
+                            <span class="glyphicon glyphicon-{% if has_embedding %}ok{% else %}minus{% endif %}"></span>
+                            {{ _('AI Search') }}
+                        </span>
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <button id="generate-ai-summary" type="button" class="btn btn-primary" 
+                                data-book-id="{{ entry.id }}" 
+                                data-has-summary="{{ 'true' if ai_summary else 'false' }}">
+                            <span class="glyphicon glyphicon-{% if ai_summary %}refresh{% else %}text-width{% endif %}"></span>
+                            {% if ai_summary %}
+                                {{ _('Regenerate Summary') }}
+                            {% else %}
+                                {{ _('Generate AI Summary') }}
+                            {% endif %}
+                        </button>
+                    </div>
+
+                    <div id="ai-summary-loading" style="display: none;">
+                        <p><span class="glyphicon glyphicon-refresh glyphicon-spin"></span> {{ _('Generating summary...') }}</p>
+                    </div>
+
+                    <div id="ai-summary-error" class="alert alert-danger" style="display: none;">
+                        <span class="glyphicon glyphicon-exclamation-sign"></span> <span id="ai-summary-error-message"></span>
+                    </div>
+
+                    {% if ai_summary %}
+                        <div class="panel panel-default" id="ai-summary-display">
+                            <div class="panel-heading">
+                                <h4 class="panel-title">
+                                    <span class="glyphicon glyphicon-info-sign"></span> {{ _('AI Summary') }}
+                                </h4>
+                            </div>
+                            <div class="panel-body" id="ai-summary-text">
+                                {{ ai_summary.summary_text|safe }}
+                            </div>
+                            <div class="panel-footer">
+                                <small id="ai-summary-date">{{ _('Generated on') }} {{ ai_summary.created_at|formatdate }}</small>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# Full Book Indexing Section #}
+                {% if config.config_ai_enabled and ai_full_index_enabled %}
+                    <div class="ai-index-section" style="margin-top: 20px; margin-bottom: 20px;">
+                        <h3>
+                            <span class="glyphicon glyphicon-comment"></span> 
+                            {{ _('Book Chatbot Indexing') }}
+                        </h3>
+                        <p class="text-muted">{{ _('Index the full book content to enable the chatbot feature. Once indexed, you can ask questions about this book.') }}</p>
+                        
+                        <div id="ai-index-loading" style="display: none;"></div>
+                        <div id="ai-index-error" class="alert alert-danger" style="display: none;">
+                            <span class="glyphicon glyphicon-exclamation-sign"></span>
+                            <span id="ai-index-error-message"></span>
+                        </div>
+                        <div id="ai-index-status"></div>
+
+                        {# Server-rendered status messages #}
+                        <div id="ai-index-server-status" style="margin-top: 10px;">
+                            {% if index_status and index_status.status == 'completed' %}
+                                <span class="label label-success">
+                                    <span class="glyphicon glyphicon-ok"></span>
+                                    {{ _('Indexed') }} ({{ index_status.total_chunks }} {{ _('chunks') }})
+                                </span>
+                            {% elif index_status and index_status.status == 'processing' %}
+                                <div class="alert alert-info" style="margin: 0; display: inline-block;">
+                                    <span class="glyphicon glyphicon-refresh glyphicon-spin"></span>
+                                    {{ _('Indexing in progress') }}: {{ index_status.processed_chunks }}/{{ index_status.total_chunks }} {{ _('chunks') }}
+                                </div>
+                            {% elif index_status and index_status.status == 'failed' %}
+                                <div class="alert alert-danger" style="margin: 0; display: inline-block;">
+                                    <span class="glyphicon glyphicon-exclamation-sign"></span>
+                                    {{ _('Indexing failed') }}: {{ index_status.error_message or _('Unknown error') }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Action buttons #}
+                        <div id="ai-index-buttons" style="margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+                            {# Index button - show when not indexed, failed, or pending #}
+                            <button id="index-book-btn"
+                                    class="btn btn-sm btn-primary"
+                                    data-book-id="{{ entry.id }}"
+                                    onclick="AIIndexing.startIndexing({{ entry.id }})"
+                                    style="{% if index_status and index_status.status in ['completed', 'processing'] %}display: none;{% endif %}">
+                                <span class="glyphicon glyphicon-comment"></span>
+                                {{ _('Index for Chatbot') }}
+                            </button>
+
+                            {# Force re-index button - show when processing (stuck) #}
+                            <button id="force-reindex-btn"
+                                    class="btn btn-sm btn-warning"
+                                    data-book-id="{{ entry.id }}"
+                                    onclick="AIIndexing.forceReindex({{ entry.id }})"
+                                    style="{% if not (index_status and index_status.status == 'processing') %}display: none;{% endif %}">
+                                <span class="glyphicon glyphicon-repeat"></span>
+                                {{ _('Force Re-index') }}
+                            </button>
+
+                            {# Delete button - show when completed or processing #}
+                            <button id="delete-index-btn"
+                                    class="btn btn-sm btn-danger"
+                                    data-book-id="{{ entry.id }}"
+                                    onclick="AIIndexing.deleteIndex({{ entry.id }})"
+                                    style="{% if not (index_status and index_status.status in ['completed', 'processing']) %}display: none;{% endif %}">
+                                <span class="glyphicon glyphicon-trash"></span>
+                                {{ _('Delete Index') }}
+                            </button>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {# Book Chatbot Section #}
+                {% if config.config_ai_enabled and config.config_ai_chatbot_enabled %}
+                    {# Not indexed message - show if chatbot not available #}
+                    <div id="chatbot-not-indexed" style="{% if chatbot_available %}display: none;{% endif %} margin-top: 20px;">
+                        <div class="alert alert-info">
+                            <span class="glyphicon glyphicon-info-sign"></span>
+                            {{ _('This book is not indexed. Please index it first to use the chatbot.') }}
+                        </div>
+                    </div>
+
+                    {# Chatbot interface - show if chatbot available (book has chunks) #}
+                    <div id="chatbot-section" class="ai-chatbot-section" style="margin-top: 20px; margin-bottom: 20px; {% if not chatbot_available %}display: none;{% endif %}">
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h4 class="panel-title">
+                                    <span class="glyphicon glyphicon-comment"></span> 
+                                    {{ _('Ask Questions About This Book') }}
+                                </h4>
+                            </div>
+                            <div class="panel-body">
+                                {# Chat history #}
+                                <ul id="chatbot-history" class="list-group" style="max-height: 400px; overflow-y: auto; margin-bottom: 15px;">
+                                    {# Messages will be added here by JavaScript #}
+                                </ul>
+                                
+                                {# Input area #}
+                                <div class="input-group">
+                                    <input type="text" 
+                                           id="chatbot-input" 
+                                           class="form-control" 
+                                           placeholder="{{ _('Ask a question about this book...') }}"
+                                           data-book-id="{{ entry.id }}"
+                                           autocomplete="off">
+                                    <span class="input-group-btn">
+                                        <button id="chatbot-send-btn" 
+                                                class="btn btn-primary" 
+                                                type="button">
+                                            <span class="glyphicon glyphicon-send"></span> 
+                                            {{ _('Send') }}
+                                        </button>
+                                        <button id="chatbot-clear-btn" 
+                                                class="btn btn-default" 
+                                                type="button"
+                                                title="{{ _('Clear chat history') }}">
+                                            <span class="glyphicon glyphicon-trash"></span>
+                                        </button>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endif %}
 
             {% if entry.comments|length > 0 and entry.comments[0].text|length > 0 %}
                 <div class="comments">
@@ -288,6 +481,73 @@
                 </div>
             {% endif %}
 
+            {# Similar Books Section #}
+            {% if config.config_ai_enabled %}
+                <div id="similar-books-section" class="similar-books-section" style="margin-top: 30px; margin-bottom: 20px;">
+                    <div id="similar-books-content">
+                        {% if similar_books and similar_books|length > 0 %}
+                            <h3>
+                                <span class="glyphicon glyphicon-book"></span> 
+                                {{ _('Similar Books') }}
+                            </h3>
+                            <div class="row display-flex">
+                                {% for item in similar_books[:8] %}
+                                    {% set similar = item.book %}
+                                    {% set score = item.score %}
+                                    <div class="col-sm-3 col-lg-2 col-xs-6 book">
+                                        <div class="cover">
+                                            <a href="{{ url_for('web.show_book', book_id=similar.id) }}">
+                                                <span class="img" title="{{ similar.title }}">
+                                                    <img src="{{ url_for('web.get_cover', book_id=similar.id, resolution='og', c=similar|last_modified) }}" alt="{{ similar.title }}" />
+                                                </span>
+                                            </a>
+                                        </div>
+                                        <div class="meta">
+                                            <a href="{{ url_for('web.show_book', book_id=similar.id) }}">
+                                                <p title="{{ similar.title }}" class="title">
+                                                    {{ similar.title|shortentitle }}
+                                                </p>
+                                            </a>
+                                            <p class="author">
+                                                {% for author in similar.authors %}
+                                                    {% if not loop.first %}<span>&amp;</span>{% endif %}
+                                                    <a class="author-name" href="{{ url_for('web.books_list', data='author', sort_param='stored', book_id=author.id) }}">
+                                                        {{ author.name.replace('|',',')|shortentitle(30) }}
+                                                    </a>
+                                                {% endfor %}
+                                            </p>
+                                            {% if score and score > 0 %}
+                                            <p class="similarity-score" style="margin-top: 5px;">
+                                                <span class="label label-{% if score > 0.7 %}success{% elif score > 0.4 %}info{% else %}default{% endif %}">
+                                                    <span class="glyphicon glyphicon-flash"></span>
+                                                    {{ (score * 100)|int }}%
+                                                </span>
+                                            </p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% elif has_embedding %}
+                            {# Embedding exists but no similar books found #}
+                            <h3>
+                                <span class="glyphicon glyphicon-book"></span> 
+                                {{ _('Similar Books') }}
+                            </h3>
+                            <div class="alert alert-info">
+                                <span class="glyphicon glyphicon-info-sign"></span>
+                                {{ _('No similar books found yet. More books need AI summaries to find matches.') }}
+                            </div>
+                        {% else %}
+                            {# No embedding exists #}
+                            <div class="alert alert-info">
+                                <span class="glyphicon glyphicon-info-sign"></span>
+                                {{ _('Similar books will appear here after an AI summary is generated for this book.') }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
 
             <div class="more-stuff">
 
@@ -340,16 +600,6 @@
                     {% endif %}
 
                 {% endif %}
-                {% if current_user.role_edit() %}
-                    <div class="col-sm-12">
-                        <div class="btn-group" role="group" aria-label="Edit/Delete book">
-                            <a href="{{ url_for('edit-book.show_edit_book', book_id=entry.id) }}"
-                               class="btn btn-sm btn-primary" id="edit_book" role="button"><span
-                                    class="glyphicon glyphicon-edit"></span> {{ _('Edit Metadata') }}</a>
-                        </div>
-                        <div class="btn btn-default" data-back="{{ url_for('web.index') }}" id="back">{{_('Cancel')}}</div>
-                   </div>
-                {% endif %}
         </div>
     </div>
 </div>
@@ -371,6 +621,15 @@
 </script>
 <script src="{{ url_for('static', filename='js/details.js') }}"></script>
 <script src="{{ url_for('static', filename='js/fullscreen.js') }}"></script>
+{% if config.config_ai_enabled %}
+<script src="{{ url_for('static', filename='js/ai/summary.js') }}"></script>
+{% if ai_full_index_enabled %}
+<script src="{{ url_for('static', filename='js/ai/indexing.js') }}"></script>
+{% endif %}
+{% if config.config_ai_chatbot_enabled %}
+<script src="{{ url_for('static', filename='js/ai/chatbot.js') }}"></script>
+{% endif %}
+{% endif %}
 <script type="text/javascript">
 </script>
 

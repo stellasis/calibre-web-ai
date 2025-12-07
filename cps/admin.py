@@ -227,9 +227,26 @@ def admin():
     t = timedelta(hours=config.schedule_duration // 60, minutes=config.schedule_duration % 60)
     schedule_duration = format_timedelta(t, threshold=.99)
 
+    # Check if API key is configured (check both decrypted and encrypted fields)
+    ai_api_key_masked = None
+    api_key = getattr(config, 'config_ai_api_key', None)
+    api_key_e = getattr(config, 'config_ai_api_key_e', None)
+    
+    # If we have a decrypted key, mask it for display
+    if api_key:
+        if len(api_key) >= 8:
+            ai_api_key_masked = api_key[:8] + "..."
+        else:
+            # Key exists but is too short to mask - just show "Configured"
+            ai_api_key_masked = "***"
+    # If we only have encrypted key, it's still configured
+    elif api_key_e:
+        # Key exists but not decrypted - show generic indicator
+        ai_api_key_masked = "***"
+
     return render_title_template("admin.html", allUser=all_user, config=config, commit=commit,
                                  feature_support=feature_support, schedule_time=schedule_time,
-                                 schedule_duration=schedule_duration,
+                                 schedule_duration=schedule_duration, ai_api_key_masked=ai_api_key_masked,
                                  title=_("Admin page"), page="admin")
 
 
@@ -272,6 +289,353 @@ def ajax_db_config():
 @admin_required
 def calibreweb_alive():
     return "", 200
+
+
+@admi.route("/admin/edit_ai_settings", methods=["GET", "POST"])
+@user_login_required
+@admin_required
+def edit_ai_settings():
+    if request.method == "POST":
+        to_save = request.form.to_dict()
+        errors = []
+        
+        # Check if AI is enabled (checkbox sends "on" when checked)
+        ai_enabled = to_save.get("ai_enabled") == "on"
+        
+        # Dependency validation: If enabled, require provider, models, and API key
+        if ai_enabled:
+            if not to_save.get("ai_provider"):
+                errors.append(_("AI Provider is required when AI features are enabled"))
+            if not to_save.get("ai_llm_model"):
+                errors.append(_("LLM Model is required when AI features are enabled"))
+            if not to_save.get("ai_embedding_model"):
+                errors.append(_("Embedding Model is required when AI features are enabled"))
+            # API key: only validate if new value provided (can keep existing)
+            api_key = to_save.get("ai_api_key", "").strip()
+            if api_key:
+                # Basic format validation for OpenAI keys
+                if to_save.get("ai_provider") == "openai" and not api_key.startswith("sk-"):
+                    errors.append(_("OpenAI API keys should start with 'sk-'"))
+            else:
+                # Check if existing API key is available (check both decrypted and encrypted fields)
+                existing_key = getattr(config, 'config_ai_api_key', None)
+                existing_key_e = getattr(config, 'config_ai_api_key_e', None)
+                if not existing_key and not existing_key_e:
+                    errors.append(_("API key is required when AI features are enabled"))
+        
+        # Range validation (only if AI enabled or values provided)
+        if ai_enabled or to_save.get("ai_max_tokens_summary"):
+            try:
+                max_tokens = int(to_save.get("ai_max_tokens_summary", 500))
+                if not (100 <= max_tokens <= 2000):
+                    errors.append(_("Max Summary Tokens must be between 100 and 2000"))
+            except (ValueError, TypeError):
+                errors.append(_("Max Summary Tokens must be a valid number"))
+        
+        if ai_enabled or to_save.get("ai_timeout_seconds"):
+            try:
+                timeout = int(to_save.get("ai_timeout_seconds", 60))
+                if not (10 <= timeout <= 300):
+                    errors.append(_("Request Timeout must be between 10 and 300 seconds"))
+            except (ValueError, TypeError):
+                errors.append(_("Request Timeout must be a valid number"))
+        
+        if ai_enabled or to_save.get("ai_max_retries"):
+            try:
+                max_retries = int(to_save.get("ai_max_retries", 3))
+                if not (0 <= max_retries <= 10):
+                    errors.append(_("Max Retries must be between 0 and 10"))
+            except (ValueError, TypeError):
+                errors.append(_("Max Retries must be a valid number"))
+        
+        # Full book indexing validation
+        full_index_enabled = to_save.get("ai_full_index_enabled") == "on"
+        if full_index_enabled:
+            try:
+                chunk_size = int(to_save.get("ai_chunk_size_tokens", 500))
+                if not (100 <= chunk_size <= 2000):
+                    errors.append(_("Chunk Size must be between 100 and 2000 tokens"))
+            except (ValueError, TypeError):
+                errors.append(_("Chunk Size must be a valid number"))
+            
+            try:
+                chunk_overlap = int(to_save.get("ai_chunk_overlap_tokens", 50))
+                if not (0 <= chunk_overlap <= 200):
+                    errors.append(_("Chunk Overlap must be between 0 and 200 tokens"))
+            except (ValueError, TypeError):
+                errors.append(_("Chunk Overlap must be a valid number"))
+            
+            try:
+                max_chunks = int(to_save.get("ai_max_chunks_per_book", 5000))
+                if not (100 <= max_chunks <= 50000):
+                    errors.append(_("Max Chunks per Book must be between 100 and 50000"))
+            except (ValueError, TypeError):
+                errors.append(_("Max Chunks per Book must be a valid number"))
+            
+            try:
+                batch_size = int(to_save.get("ai_chunk_batch_size", 25))
+                if not (1 <= batch_size <= 100):
+                    errors.append(_("Embedding Batch Size must be between 1 and 100"))
+            except (ValueError, TypeError):
+                errors.append(_("Embedding Batch Size must be a valid number"))
+        
+        # Book Chatbot validation
+        chatbot_enabled = to_save.get("ai_chatbot_enabled") == "on"
+        if chatbot_enabled:
+            # Chatbot requires full indexing to be enabled
+            if not full_index_enabled:
+                errors.append(_("Full Book Indexing must be enabled to use the chatbot feature"))
+            
+            try:
+                max_tokens_chatbot = int(to_save.get("ai_max_tokens_chatbot", 500))
+                if not (100 <= max_tokens_chatbot <= 2000):
+                    errors.append(_("Max Chatbot Tokens must be between 100 and 2000"))
+            except (ValueError, TypeError):
+                errors.append(_("Max Chatbot Tokens must be a valid number"))
+            
+            try:
+                chunks_limit = int(to_save.get("ai_chatbot_chunks_limit", 5))
+                if not (1 <= chunks_limit <= 20):
+                    errors.append(_("Chatbot Chunks Limit must be between 1 and 20"))
+            except (ValueError, TypeError):
+                errors.append(_("Chatbot Chunks Limit must be a valid number"))
+            
+            try:
+                similarity_threshold = float(to_save.get("ai_chatbot_similarity_threshold", 0.3))
+                if not (0.0 <= similarity_threshold <= 1.0):
+                    errors.append(_("Similarity Threshold must be between 0.0 and 1.0"))
+            except (ValueError, TypeError):
+                errors.append(_("Similarity Threshold must be a valid number"))
+            
+            try:
+                history_limit = int(to_save.get("ai_chatbot_history_limit", 5))
+                if not (0 <= history_limit <= 20):
+                    errors.append(_("Chat History Limit must be between 0 and 20"))
+            except (ValueError, TypeError):
+                errors.append(_("Chat History Limit must be a valid number"))
+        
+        # If validation errors, show form again with errors
+        if errors:
+            for error in errors:
+                flash(error, category="error")
+            # Reload current config for display
+            content = {
+                'config_ai_enabled': config.config_ai_enabled,
+                'config_ai_provider': config.config_ai_provider,
+                'config_ai_llm_model': config.config_ai_llm_model,
+                'config_ai_embedding_model': config.config_ai_embedding_model,
+                'config_ai_max_tokens_summary': config.config_ai_max_tokens_summary,
+                'config_ai_timeout_seconds': config.config_ai_timeout_seconds,
+                'config_ai_max_retries': config.config_ai_max_retries,
+                'config_ai_full_index_enabled': getattr(config, 'config_ai_full_index_enabled', False),
+                'config_ai_chunk_size_tokens': getattr(config, 'config_ai_chunk_size_tokens', 500),
+                'config_ai_chunk_overlap_tokens': getattr(config, 'config_ai_chunk_overlap_tokens', 50),
+                'config_ai_max_chunks_per_book': getattr(config, 'config_ai_max_chunks_per_book', 5000),
+                'config_ai_chunk_batch_size': getattr(config, 'config_ai_chunk_batch_size', 25),
+                'config_ai_auto_index_on_summary': getattr(config, 'config_ai_auto_index_on_summary', False),
+                'config_ai_chatbot_enabled': getattr(config, 'config_ai_chatbot_enabled', False),
+                'config_ai_max_tokens_chatbot': getattr(config, 'config_ai_max_tokens_chatbot', 500),
+                'config_ai_chatbot_chunks_limit': getattr(config, 'config_ai_chatbot_chunks_limit', 5),
+                'config_ai_chatbot_similarity_threshold': getattr(config, 'config_ai_chatbot_similarity_threshold', 0.3),
+                'config_ai_chatbot_history_limit': getattr(config, 'config_ai_chatbot_history_limit', 5),
+            }
+            return render_title_template("admin_ai_settings.html", content=content,
+                                         title=_("Edit AI Settings"), page="admin")
+        
+        # Handle test configuration
+        if to_save.get("test"):
+            # For MVP, just validate configuration (full API test can be added later)
+            if ai_enabled and not to_save.get("ai_api_key", "").strip():
+                # Check if existing API key is available
+                existing_key = getattr(config, 'config_ai_api_key', None)
+                if not existing_key:
+                    flash(_("API key is required to test configuration"), category="error")
+                    content = {
+                        'config_ai_enabled': ai_enabled,
+                        'config_ai_provider': to_save.get("ai_provider", ""),
+                        'config_ai_llm_model': to_save.get("ai_llm_model", ""),
+                        'config_ai_embedding_model': to_save.get("ai_embedding_model", ""),
+                        'config_ai_max_tokens_summary': int(to_save.get("ai_max_tokens_summary", 500)),
+                        'config_ai_timeout_seconds': int(to_save.get("ai_timeout_seconds", 60)),
+                        'config_ai_max_retries': int(to_save.get("ai_max_retries", 3)),
+                        'config_ai_full_index_enabled': to_save.get("ai_full_index_enabled") == "on",
+                        'config_ai_chunk_size_tokens': int(to_save.get("ai_chunk_size_tokens", 500)),
+                        'config_ai_chunk_overlap_tokens': int(to_save.get("ai_chunk_overlap_tokens", 50)),
+                        'config_ai_max_chunks_per_book': int(to_save.get("ai_max_chunks_per_book", 5000)),
+                        'config_ai_chunk_batch_size': int(to_save.get("ai_chunk_batch_size", 25)),
+                        'config_ai_auto_index_on_summary': to_save.get("ai_auto_index_on_summary") == "on",
+                    }
+                    return render_title_template("admin_ai_settings.html", content=content,
+                                                 title=_("Edit AI Settings"), page="admin")
+            flash(_("Configuration test passed (validation only)"), category="success")
+            # Don't save on test, just validate
+            content = {
+                'config_ai_enabled': ai_enabled,
+                'config_ai_provider': to_save.get("ai_provider", ""),
+                'config_ai_llm_model': to_save.get("ai_llm_model", ""),
+                'config_ai_embedding_model': to_save.get("ai_embedding_model", ""),
+                'config_ai_max_tokens_summary': int(to_save.get("ai_max_tokens_summary", 500)),
+                'config_ai_timeout_seconds': int(to_save.get("ai_timeout_seconds", 60)),
+                'config_ai_max_retries': int(to_save.get("ai_max_retries", 3)),
+                'config_ai_full_index_enabled': to_save.get("ai_full_index_enabled") == "on",
+                'config_ai_chunk_size_tokens': int(to_save.get("ai_chunk_size_tokens", 500)),
+                'config_ai_chunk_overlap_tokens': int(to_save.get("ai_chunk_overlap_tokens", 50)),
+                'config_ai_max_chunks_per_book': int(to_save.get("ai_max_chunks_per_book", 5000)),
+                'config_ai_chunk_batch_size': int(to_save.get("ai_chunk_batch_size", 25)),
+                'config_ai_auto_index_on_summary': to_save.get("ai_auto_index_on_summary") == "on",
+            }
+            return render_title_template("admin_ai_settings.html", content=content,
+                                         title=_("Edit AI Settings"), page="admin")
+        
+        # Save configuration
+        try:
+            # Set checkbox value (checkbox sends "on" when checked, nothing when unchecked)
+            # Form field is "ai_enabled", config field is "config_ai_enabled"
+            if "ai_enabled" in to_save:
+                config.config_ai_enabled = (to_save.get("ai_enabled") == "on")
+            else:
+                config.config_ai_enabled = False
+            
+            # Set string values (form fields use "ai_*" prefix, config fields use "config_ai_*" prefix)
+            if ai_enabled:
+                if "ai_provider" in to_save:
+                    config.config_ai_provider = strip_whitespaces(to_save.get("ai_provider", ""))
+                if "ai_llm_model" in to_save:
+                    config.config_ai_llm_model = strip_whitespaces(to_save.get("ai_llm_model", ""))
+                if "ai_embedding_model" in to_save:
+                    config.config_ai_embedding_model = strip_whitespaces(to_save.get("ai_embedding_model", ""))
+            
+            # Set integer values
+            if "ai_max_tokens_summary" in to_save:
+                config.config_ai_max_tokens_summary = int(to_save.get("ai_max_tokens_summary", 500))
+            if "ai_timeout_seconds" in to_save:
+                config.config_ai_timeout_seconds = int(to_save.get("ai_timeout_seconds", 60))
+            if "ai_max_retries" in to_save:
+                config.config_ai_max_retries = int(to_save.get("ai_max_retries", 3))
+            
+            # Full book indexing settings
+            # Form field is "ai_full_index_enabled", config field is "config_ai_full_index_enabled"
+            if "ai_full_index_enabled" in to_save:
+                config.config_ai_full_index_enabled = (to_save.get("ai_full_index_enabled") == "on")
+            else:
+                config.config_ai_full_index_enabled = False
+            
+            if getattr(config, 'config_ai_full_index_enabled', False):
+                # Form fields use "ai_*" prefix, config fields use "config_ai_*" prefix
+                if "ai_chunk_size_tokens" in to_save:
+                    config.config_ai_chunk_size_tokens = int(to_save.get("ai_chunk_size_tokens", 500))
+                if "ai_chunk_overlap_tokens" in to_save:
+                    config.config_ai_chunk_overlap_tokens = int(to_save.get("ai_chunk_overlap_tokens", 50))
+                if "ai_max_chunks_per_book" in to_save:
+                    config.config_ai_max_chunks_per_book = int(to_save.get("ai_max_chunks_per_book", 5000))
+                if "ai_chunk_batch_size" in to_save:
+                    config.config_ai_chunk_batch_size = int(to_save.get("ai_chunk_batch_size", 25))
+                if "ai_auto_index_on_summary" in to_save:
+                    config.config_ai_auto_index_on_summary = (to_save.get("ai_auto_index_on_summary") == "on")
+                else:
+                    config.config_ai_auto_index_on_summary = False
+            
+            # Book Chatbot settings
+            # Form field is "ai_chatbot_enabled", config field is "config_ai_chatbot_enabled"
+            if "ai_chatbot_enabled" in to_save:
+                config.config_ai_chatbot_enabled = (to_save.get("ai_chatbot_enabled") == "on")
+            else:
+                config.config_ai_chatbot_enabled = False
+            
+            if getattr(config, 'config_ai_chatbot_enabled', False):
+                # Form fields use "ai_*" prefix, config fields use "config_ai_*" prefix
+                if "ai_max_tokens_chatbot" in to_save:
+                    config.config_ai_max_tokens_chatbot = int(to_save.get("ai_max_tokens_chatbot", 500))
+                if "ai_chatbot_chunks_limit" in to_save:
+                    config.config_ai_chatbot_chunks_limit = int(to_save.get("ai_chatbot_chunks_limit", 5))
+                if "ai_chatbot_similarity_threshold" in to_save:
+                    config.config_ai_chatbot_similarity_threshold = float(to_save.get("ai_chatbot_similarity_threshold", 0.5))
+                if "ai_chatbot_history_limit" in to_save:
+                    config.config_ai_chatbot_history_limit = int(to_save.get("ai_chatbot_history_limit", 5))
+            
+            # Handle API key: only update if new value provided
+            api_key = to_save.get("ai_api_key", "").strip()
+            if api_key:
+                # Set directly - will be encrypted on save
+                config.config_ai_api_key = api_key
+            
+            # If disabling AI, clear provider and models (optional - can keep for reference)
+            if not ai_enabled:
+                config.config_ai_provider = ""
+                config.config_ai_llm_model = ""
+                config.config_ai_embedding_model = ""
+            
+            # Save to database
+            config.save()
+            flash(_("AI settings saved successfully"), category="success")
+        except (OperationalError, InvalidRequestError) as e:
+            ub.session.rollback()
+            log.error_or_exception("Settings Database error: {}".format(e))
+            flash(_("Oops! Database Error: %(error)s.", error=str(e)), category="error")
+            content = {
+                'config_ai_enabled': config.config_ai_enabled,
+                'config_ai_provider': config.config_ai_provider,
+                'config_ai_llm_model': config.config_ai_llm_model,
+                'config_ai_embedding_model': config.config_ai_embedding_model,
+                'config_ai_max_tokens_summary': config.config_ai_max_tokens_summary,
+                'config_ai_timeout_seconds': config.config_ai_timeout_seconds,
+                'config_ai_max_retries': config.config_ai_max_retries,
+                'config_ai_full_index_enabled': getattr(config, 'config_ai_full_index_enabled', False),
+                'config_ai_chunk_size_tokens': getattr(config, 'config_ai_chunk_size_tokens', 500),
+                'config_ai_chunk_overlap_tokens': getattr(config, 'config_ai_chunk_overlap_tokens', 50),
+                'config_ai_max_chunks_per_book': getattr(config, 'config_ai_max_chunks_per_book', 5000),
+                'config_ai_chunk_batch_size': getattr(config, 'config_ai_chunk_batch_size', 25),
+                'config_ai_auto_index_on_summary': getattr(config, 'config_ai_auto_index_on_summary', False),
+            }
+            return render_title_template("admin_ai_settings.html", content=content,
+                                         title=_("Edit AI Settings"), page="admin")
+        except Exception as e:
+            log.error_or_exception("Error saving AI settings: {}".format(e))
+            flash(_("Oops! Error saving settings: %(error)s.", error=str(e)), category="error")
+            content = {
+                'config_ai_enabled': config.config_ai_enabled,
+                'config_ai_provider': config.config_ai_provider,
+                'config_ai_llm_model': config.config_ai_llm_model,
+                'config_ai_embedding_model': config.config_ai_embedding_model,
+                'config_ai_max_tokens_summary': config.config_ai_max_tokens_summary,
+                'config_ai_timeout_seconds': config.config_ai_timeout_seconds,
+                'config_ai_max_retries': config.config_ai_max_retries,
+                'config_ai_full_index_enabled': getattr(config, 'config_ai_full_index_enabled', False),
+                'config_ai_chunk_size_tokens': getattr(config, 'config_ai_chunk_size_tokens', 500),
+                'config_ai_chunk_overlap_tokens': getattr(config, 'config_ai_chunk_overlap_tokens', 50),
+                'config_ai_max_chunks_per_book': getattr(config, 'config_ai_max_chunks_per_book', 5000),
+                'config_ai_chunk_batch_size': getattr(config, 'config_ai_chunk_batch_size', 25),
+                'config_ai_auto_index_on_summary': getattr(config, 'config_ai_auto_index_on_summary', False),
+            }
+            return render_title_template("admin_ai_settings.html", content=content,
+                                         title=_("Edit AI Settings"), page="admin")
+        
+        # Redirect to admin page on success
+        return redirect(url_for('admin.admin'))
+    else:
+        # GET: Load current configuration and render form
+        content = {
+            'config_ai_enabled': config.config_ai_enabled,
+            'config_ai_provider': config.config_ai_provider or 'openai',
+            'config_ai_llm_model': config.config_ai_llm_model or 'gpt-4o-mini',
+            'config_ai_embedding_model': config.config_ai_embedding_model or 'text-embedding-3-small',
+            'config_ai_max_tokens_summary': config.config_ai_max_tokens_summary or 500,
+            'config_ai_timeout_seconds': config.config_ai_timeout_seconds or 60,
+            'config_ai_max_retries': config.config_ai_max_retries or 3,
+            'config_ai_full_index_enabled': getattr(config, 'config_ai_full_index_enabled', False),
+            'config_ai_chunk_size_tokens': getattr(config, 'config_ai_chunk_size_tokens', 500),
+            'config_ai_chunk_overlap_tokens': getattr(config, 'config_ai_chunk_overlap_tokens', 50),
+            'config_ai_max_chunks_per_book': getattr(config, 'config_ai_max_chunks_per_book', 5000),
+            'config_ai_chunk_batch_size': getattr(config, 'config_ai_chunk_batch_size', 25),
+            'config_ai_auto_index_on_summary': getattr(config, 'config_ai_auto_index_on_summary', False),
+            'config_ai_chatbot_enabled': getattr(config, 'config_ai_chatbot_enabled', False),
+            'config_ai_max_tokens_chatbot': getattr(config, 'config_ai_max_tokens_chatbot', 500),
+            'config_ai_chatbot_chunks_limit': getattr(config, 'config_ai_chatbot_chunks_limit', 5),
+            'config_ai_chatbot_similarity_threshold': getattr(config, 'config_ai_chatbot_similarity_threshold', 0.5),
+            'config_ai_chatbot_history_limit': getattr(config, 'config_ai_chatbot_history_limit', 5),
+        }
+        return render_title_template("admin_ai_settings.html", content=content,
+                                     title=_("Edit AI Settings"), page="admin")
 
 
 @admi.route("/admin/viewconfig")

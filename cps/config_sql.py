@@ -20,7 +20,7 @@ import os
 import sys
 import json
 
-from sqlalchemy import Column, String, Integer, SmallInteger, Boolean, BLOB, JSON
+from sqlalchemy import Column, String, Integer, SmallInteger, Boolean, BLOB, JSON, Float
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.sql.expression import text
 from sqlalchemy import exists
@@ -174,6 +174,30 @@ class _Settings(_Base):
     config_limiter_uri = Column(String, default="")
     config_limiter_options = Column(String, default="")
     config_check_extensions = Column(Boolean, default=True)
+
+    # AI Configuration (Story 1.3)
+    config_ai_enabled = Column(Boolean, default=False)
+    config_ai_provider = Column(String, default="openai")
+    config_ai_llm_model = Column(String, default="gpt-4o-mini")
+    config_ai_embedding_model = Column(String, default="text-embedding-3-small")
+    config_ai_api_key_e = Column(String)  # Encrypted API key
+    config_ai_api_key = Column(String)  # Decrypted API key (for access)
+    config_ai_max_tokens_summary = Column(Integer, default=500)
+    config_ai_timeout_seconds = Column(Integer, default=60)
+    config_ai_max_retries = Column(Integer, default=3)
+    # Full Book Indexing Configuration
+    config_ai_full_index_enabled = Column(Boolean, default=False)
+    config_ai_chunk_size_tokens = Column(Integer, default=500)
+    config_ai_chunk_overlap_tokens = Column(Integer, default=50)
+    config_ai_max_chunks_per_book = Column(Integer, default=5000)
+    config_ai_chunk_batch_size = Column(Integer, default=25)
+    config_ai_auto_index_on_summary = Column(Boolean, default=False)
+    # Book Chatbot Configuration
+    config_ai_chatbot_enabled = Column(Boolean, default=False)
+    config_ai_max_tokens_chatbot = Column(Integer, default=500)
+    config_ai_chatbot_chunks_limit = Column(Integer, default=5)
+    config_ai_chatbot_similarity_threshold = Column(Float, default=0.3)  # Lower default for better recall
+    config_ai_chatbot_history_limit = Column(Integer, default=5)
 
     def __repr__(self):
         return self.__class__.__name__
@@ -342,9 +366,19 @@ class ConfigSQL(object):
                         v = column.default.arg
                 if k.endswith("_e") and v is not None:
                     try:
-                        setattr(self, k, self._fernet.decrypt(v).decode())
+                        # Decrypt and store in both _e (for compatibility) and non-_e (for easier access)
+                        decrypted_value = self._fernet.decrypt(v).decode()
+                        setattr(self, k, decrypted_value)  # Store decrypted in _e field (original pattern)
+                        # Also store in non-_e field if it exists in _Settings
+                        decrypted_key = k[:-2]  # Remove "_e" suffix
+                        if hasattr(s, decrypted_key):
+                            setattr(self, decrypted_key, decrypted_value)
                     except cryptography.fernet.InvalidToken:
                         setattr(self, k, "")
+                        # Set non-_e version to empty as well if it exists
+                        decrypted_key = k[:-2]
+                        if hasattr(s, decrypted_key):
+                            setattr(self, decrypted_key, "")
                 else:
                     setattr(self, k, v)
 
@@ -383,6 +417,11 @@ class ConfigSQL(object):
             if hasattr(s, k):
                 if k.endswith("_e"):
                     setattr(s, k, self._fernet.encrypt(self.__dict__[k].encode()))
+                elif k == "config_ai_api_key" and hasattr(s, "config_ai_api_key_e"):
+                    # Encrypt API key when saving
+                    api_key_value = self.__dict__.get(k, "")
+                    if api_key_value:
+                        setattr(s, "config_ai_api_key_e", self._fernet.encrypt(api_key_value.encode()))
                 else:
                     setattr(s, k, self.__dict__[k])
 

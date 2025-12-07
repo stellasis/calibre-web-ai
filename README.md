@@ -14,15 +14,21 @@ Calibre-Web is a web app that offers a clean and intuitive interface for browsin
 
 1. [About](#calibre-web)
 2. [Features](#features)
-3. [Installation](#installation)
+3. [AI Features](#ai-features)
+   - [AI Summary Generation](#ai-summary-generation)
+   - [AI Semantic Search](#ai-semantic-search)
+   - [Full Book Indexing](#full-book-indexing)
+   - [Book Chatbot](#book-chatbot)
+   - [Supported AI Providers](#supported-ai-providers)
+4. [Installation](#installation)
    - [Installation via pip (recommended)](#installation-via-pip-recommended)
    - [Quick start](#quick-start)
    - [Requirements](#requirements)
-4. [Docker Images](#docker-images)
-5. [Troubleshooting](#troubleshooting)
-6. [Contributor Recognition](#contributor-recognition)
-7. [Contact](#contact)
-8. [Contributing to Calibre-Web](#contributing-to-calibre-web)
+5. [Docker Images](#docker-images)
+6. [Troubleshooting](#troubleshooting)
+7. [Contributor Recognition](#contributor-recognition)
+8. [Contact](#contact)
+9. [Contributing to Calibre-Web](#contributing-to-calibre-web)
 
 </details>
 
@@ -54,6 +60,56 @@ Calibre-Web is a web app that offers a clean and intuitive interface for browsin
 - Self-update capability
 - "Magic Link" login for easy access on eReaders
 - LDAP, Google/GitHub OAuth, and proxy authentication support
+
+## AI Features
+
+Calibre-Web includes powerful AI-powered features to enhance your library experience. All AI features are optional and can be enabled/configured in **Admin → AI Settings**.
+
+### AI Summary Generation
+Automatically generate concise summaries for your books using AI:
+- One-click summary generation from the book detail page
+- Summaries are stored and displayed alongside book metadata
+- Supports regeneration to update summaries with different models
+
+### AI Semantic Search
+Search your library using natural language queries:
+- Find books by meaning, not just keywords
+- Toggle between traditional search and AI-powered semantic search
+- Results ranked by semantic similarity to your query
+- Automatically generates embeddings from book summaries
+
+### Full Book Indexing
+Index entire book contents for deep search capabilities:
+- Chunks books into semantic segments (~500 tokens each)
+- Generates embeddings for each chunk
+- Enables searching within book passages and chapters
+- Progress tracking for long indexing operations
+- Optional auto-indexing when summaries are generated
+
+### Book Chatbot
+Ask questions about your books and get AI-powered answers:
+- Conversational Q&A interface on book detail pages
+- RAG (Retrieval-Augmented Generation) architecture
+- Answers are grounded in actual book content
+- Maintains chat history for context-aware conversations
+- Configurable similarity thresholds and context limits
+
+### Supported AI Providers
+- **OpenAI** - GPT-4o, GPT-4o-mini, text-embedding-3-small, etc.
+- **Anthropic** - Claude 3 Haiku, Claude 3 Sonnet, etc.
+- **Ollama** - Local/self-hosted models (Llama, Mistral, etc.)
+
+### AI Configuration Options
+| Setting | Description | Default |
+|---------|-------------|---------|
+| LLM Model | Model for text generation | gpt-4o-mini |
+| Embedding Model | Model for vector embeddings | text-embedding-3-small |
+| Max Summary Tokens | Maximum length of generated summaries | 500 |
+| Chunk Size | Tokens per chunk for full indexing | 500 |
+| Chunk Overlap | Overlap between chunks for context | 50 |
+| Max Chunks per Book | Safety limit for large books | 5000 |
+| Chatbot Chunks Limit | Context chunks for chatbot answers | 5 |
+| Similarity Threshold | Minimum relevance score for results | 0.3 |
 
 ## Installation
 

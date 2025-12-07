@@ -46,28 +46,47 @@ development_status:
   epic-1-retrospective: optional
   
   # Epic 2: AI Summary Feature
-  epic-2: backlog
-  2-1-ai-summarization-service: backlog
-  2-2-background-task-for-summary-generation: backlog
-  2-3-api-endpoint-for-summary-generation: backlog
-  2-4-ui-integration-for-summary-generation: backlog
+  epic-2: in-progress
+  2-1-ai-summarization-service: review
+  2-2-background-task-for-summary-generation: review
+  2-3-api-endpoint-for-summary-generation: review
+  2-4-ui-integration-for-summary-generation: review
   epic-2-retrospective: optional
   
   # Epic 3: AI Semantic Search
-  epic-3: backlog
-  3-1-embedding-generation-service: backlog
-  3-2-semantic-search-service: backlog
-  3-3-search-route-integration-and-ui: backlog
-  epic-3-retrospective: optional
+  epic-3: done
+  3-1-embedding-generation-service: done
+  3-2-semantic-search-service: done
+  3-3-search-route-integration-and-ui: done
+  epic-3-retrospective: completed
   
   # Epic 4: Similar Books Recommendations
-  epic-4: backlog
-  4-1-similar-books-api-endpoint: backlog
-  4-2-similar-books-ui-integration: backlog
-  epic-4-retrospective: optional
+  epic-4: done
+  4-1-similar-books-api-endpoint: done
+  4-2-similar-books-ui-integration: done
+  epic-4-retrospective: completed
   
   # Epic 5: Configuration UI
-  epic-5: backlog
-  5-1-admin-configuration-display: backlog
-  5-2-admin-configuration-edit-page: backlog
+  epic-5: done
+  5-1-admin-configuration-display: done
+  5-2-admin-configuration-edit-page: done
   epic-5-retrospective: optional
+  
+  # Epic 6: Full Book Indexing (RAG Architecture)
+  epic-6: backlog
+  6-1-chunk-database-schema-and-models: backlog
+  6-2-book-chunking-service: backlog
+  6-3-chunk-embedding-service: backlog
+  6-4-full-book-indexing-background-task: backlog
+  6-5-chunk-search-service: backlog
+  6-6-full-indexing-api-endpoints: backlog
+  6-7-full-indexing-ui-integration: backlog
+  epic-6-retrospective: optional
+  
+  # Epic 7: Book Chatbot (RAG Q&A)
+  epic-7: contexted
+  7-1-rag-chatbot-service: done
+  7-2-chatbot-api-endpoints: done
+  7-3-chatbot-ui-integration: done
+  7-4-chat-history-persistence: done
+  epic-7-retrospective: optional

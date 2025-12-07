@@ -438,3 +438,34 @@ div.log {
 .error-list {
     margin-top: 5px;
   }
+
+/* Similar Books Section - Allow covers to size based on width, not fixed height */
+.similar-books-section .book .cover {
+  height: auto !important;
+  min-height: 0 !important;
+  position: relative;
+  text-align: center;
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.similar-books-section .book .cover span.img {
+  position: relative !important;
+  display: block;
+  width: 100%;
+  height: auto;
+  bottom: auto;
+  padding: 0;
+  margin: 0;
+}
+
+.similar-books-section .book .cover span.img img {
+  width: 100%;
+  height: auto !important;
+  max-width: 100%;
+  object-fit: contain;
+  position: relative;
+  display: block;
+  margin: 0;
+  padding: 0;
+}

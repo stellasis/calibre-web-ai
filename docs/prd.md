@@ -230,7 +230,7 @@ If `AI_ENABLED = False`, hide AI-related UI and avoid any network calls.
 | Option | Type | Default | Required | Validation Rules | Description |
 |--------|------|---------|----------|------------------|-------------|
 | `AI_ENABLED` | boolean | `false` | No | Must be `true` or `false` | Master toggle for all AI features. When `false`, all AI UI is hidden and no network calls are made. |
-| `AI_PROVIDER` | string | `"openai"` | Yes (if `AI_ENABLED=true`) | Must be one of: `"openai"`, `"anthropic"`, `"ollama"`, `"local"` | LangChain provider identifier. Determines which AI service to use. |
+| `AI_PROVIDER` | string | `"openai"` | Yes (if `AI_ENABLED=true`) | Must be one of: `"openai"`, `"openrouter"`, `"anthropic"`, `"ollama"`, `"local"` | LangChain provider identifier. Determines which AI service to use. OpenRouter provides access to multiple models via OpenAI-compatible API. |
 | `AI_LANGCHAIN_LLM` | string | `"gpt-4o-mini"` | Yes (if `AI_ENABLED=true`) | Non-empty string, valid model identifier for selected provider | LLM model name/ID for summarization. Must be a valid model for the configured provider. |
 | `AI_LANGCHAIN_EMBEDDINGS` | string | `"text-embedding-3-small"` | Yes (if `AI_ENABLED=true`) | Non-empty string, valid embedding model identifier for selected provider | Embedding model name/ID for vector generation. Must be a valid embedding model for the configured provider. |
 | `AI_MAX_TOKENS_SUMMARY` | integer | `500` | No | Must be between 100 and 2000 | Maximum tokens for summary generation. Lower values produce shorter summaries. |

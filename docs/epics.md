@@ -147,6 +147,43 @@ This document provides the complete epic and story breakdown for calibre-web-ai,
 
 ---
 
+### Epic 6: Full Book Indexing (RAG Infrastructure)
+**User Value Statement:** Provides the infrastructure needed for users to ask questions about book content. Books are indexed into searchable chunks that power the book chatbot (Epic 7).
+
+**Stories:** 7 stories (6.1-6.7)
+- Story 6.1: Chunk Database Schema and Models
+- Story 6.2: Book Chunking Service
+- Story 6.3: Chunk Embedding Service
+- Story 6.4: Full Book Indexing Background Task
+- Story 6.5: Chunk Search Service (used by Epic 7)
+- Story 6.6: Full Indexing API Endpoints
+- Story 6.7: Full Indexing UI Integration
+
+**PRD Coverage:** Infrastructure epic (enables Epic 7: Book Chatbot)
+
+**Dependencies:** Epic 1 (Foundation), Epic 2 (Summary), Epic 3 (Semantic Search)
+
+**📄 [View Epic 6 Details →](epics/epic-6-full-book-indexing.md)**
+
+---
+
+### Epic 7: Book Chatbot (RAG Q&A)
+**User Value Statement:** Users can have conversational Q&A about book content using a chatbot interface powered by RAG (Retrieval-Augmented Generation), creating an interactive reading companion experience.
+
+**Stories:** 4 stories (7.1-7.4)
+- Story 7.1: RAG Chatbot Service
+- Story 7.2: Chatbot API Endpoints
+- Story 7.3: Chatbot UI Integration
+- Story 7.4: Chat History Persistence (Optional)
+
+**PRD Coverage:** Extended capability (beyond original MVP scope)
+
+**Dependencies:** Epic 1 (Foundation), Epic 2 (AI Summary), Epic 6 (Full Book Indexing)
+
+**📄 [View Epic 7 Details →](epics/epic-7-book-chatbot.md)**
+
+---
+
 ## FR Coverage Matrix
 
 **FR1: AI Summary Generation**
@@ -181,14 +218,16 @@ This document provides the complete epic and story breakdown for calibre-web-ai,
 
 ## Summary
 
-**Epic Structure:** 5 epics delivering incremental user value
+**Epic Structure:** 7 epics delivering incremental user value
 - Epic 1: Foundation Setup (5 stories) - Technical infrastructure
 - Epic 2: AI Summary Feature (4 stories) - User-facing summary generation
 - Epic 3: AI Semantic Search (3 stories) - User-facing semantic search
 - Epic 4: Similar Books Recommendations (2 stories) - User-facing recommendations
 - Epic 5: Configuration UI (2 stories) - Admin configuration interface
+- Epic 6: Full Book Indexing (7 stories) - Deep content search (RAG)
+- Epic 7: Book Chatbot (4 stories) - Conversational Q&A (RAG)
 
-**Total Stories:** 16 stories covering all 5 functional requirements
+**Total Stories:** 27 stories covering all 5 functional requirements + extended RAG capabilities
 
 **FR Coverage:** 100% - All functional requirements mapped to specific stories with complete acceptance criteria
 
@@ -277,15 +316,16 @@ This document provides the complete epic and story breakdown for calibre-web-ai,
 
 **Output Generated:** 
 - Master index: `docs/epics.md`
-- Epic files: `docs/epics/epic-1-foundation.md` through `epic-5-configuration.md`
+- Epic files: `docs/epics/epic-1-foundation.md` through `epic-6-full-book-indexing.md`
 
 **Full Context Incorporated:**
 - ✅ PRD functional requirements and scope
 - ✅ Architecture technical decisions and contracts
 - ✅ UX Design interaction patterns and specifications
+- ✅ Extended RAG capability for deep content search
 
-**FR Coverage:** 5 functional requirements mapped to 16 stories across 5 epics
-**Epic Structure:** 5 epics delivering incremental user value
+**FR Coverage:** 5 functional requirements mapped to 16 stories across 5 epics + 7 stories for RAG extension
+**Epic Structure:** 6 epics delivering incremental user value
 **Story Quality:** All stories sized for single dev agent completion with complete acceptance criteria
 
 **Ready for Phase 4:** Sprint Planning and Development Implementation

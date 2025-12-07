@@ -88,7 +88,13 @@ class WorkerThread(threading.Thread):
         ins = cls.get_instance()
         ins.num += 1
         username = user if user is not None else 'System'
-        log.debug("Add Task for user: {} - {}".format(username, task))
+        # Safely convert task to string for logging (handles LazyString issues)
+        try:
+            task_str = str(task)
+        except (TypeError, AttributeError) as e:
+            # If __str__() fails (e.g., LazyString issue), use task ID as fallback
+            task_str = f"Task {task.id}" if hasattr(task, 'id') else "Task"
+        log.debug("Add Task for user: {} - {}".format(username, task_str))
         ins.queue.put(QueuedTask(
             num=ins.num,
             user=username,
@@ -268,4 +274,43 @@ class CalibreTask:
         self.progress = 1
 
     def __str__(self):
-        return self.name
+        # Ensure we always return a string, not a LazyString
+        name = self.name
+        # Convert to string, handling LazyString properly
+        # CRITICAL: Check for LazyString BEFORE calling str() to avoid "__str__ returned non-string" error
+        try:
+            # Check if it's a LazyString by checking for characteristic attributes
+            # Flask-Babel LazyString has _message and _value attributes
+            if hasattr(name, '_message'):
+                # It's a LazyString - access the message directly to avoid __str__() call
+                # This prevents the "__str__ returned non-string" error
+                message = name._message
+                # The message might be a tuple (msgid, kwargs) or just a string
+                if isinstance(message, tuple) and len(message) > 0:
+                    return str(message[0])  # Get the message ID
+                return str(message)
+            
+            # If it's not a LazyString, try normal conversion
+            # But wrap in try/except to catch the "__str__ returned non-string" error
+            try:
+                result = str(name)
+                # Double-check: if str() somehow still returns a LazyString
+                if hasattr(result, '_message'):
+                    msg = result._message
+                    if isinstance(msg, tuple) and len(msg) > 0:
+                        return str(msg[0])
+                    return str(msg)
+                return result
+            except TypeError as e:
+                # This catches "__str__ returned non-string" error
+                if 'non-string' in str(e) or 'LazyString' in str(e):
+                    # It's a LazyString that failed to convert
+                    if hasattr(name, '_message'):
+                        msg = name._message
+                        if isinstance(msg, tuple) and len(msg) > 0:
+                            return str(msg[0])
+                        return str(msg)
+                raise  # Re-raise if it's a different TypeError
+        except Exception:
+            # Ultimate fallback
+            return "Task"

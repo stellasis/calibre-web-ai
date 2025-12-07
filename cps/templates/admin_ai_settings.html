@@ -1,0 +1,256 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover">
+  <h1>{{title}}</h1>
+  <form role="form" class="col-md-10 col-lg-6" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    
+    <div class="form-group">
+      <label for="ai_enabled">{{_('Enable AI Features')}}</label>
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="ai_enabled" id="ai_enabled" {% if content.config_ai_enabled %}checked{% endif %}>
+          {{_('Enable AI features')}}
+        </label>
+      </div>
+    </div>
+
+    <div id="ai-settings-fields" {% if not content.config_ai_enabled %}style="display: none;"{% endif %}>
+      <div class="form-group">
+        <label for="ai_provider">{{_('AI Provider')}}</label>
+        <select name="ai_provider" id="ai_provider" class="form-control" required>
+          <option value="openai" {% if content.config_ai_provider == 'openai' %}selected{% endif %}>OpenAI</option>
+          <option value="anthropic" {% if content.config_ai_provider == 'anthropic' %}selected{% endif %}>Anthropic</option>
+          <option value="ollama" {% if content.config_ai_provider == 'ollama' %}selected{% endif %}>Ollama</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_llm_model">{{_('LLM Model')}}</label>
+        <input type="text" class="form-control" name="ai_llm_model" id="ai_llm_model" 
+               value="{{ content.config_ai_llm_model or 'gpt-4o-mini' }}" 
+               placeholder="gpt-4o-mini" required>
+        <small class="help-block">{{_('Model name for text generation (e.g., gpt-4o-mini, claude-3-haiku)')}}</small>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_embedding_model">{{_('Embedding Model')}}</label>
+        <input type="text" class="form-control" name="ai_embedding_model" id="ai_embedding_model" 
+               value="{{ content.config_ai_embedding_model or 'text-embedding-3-small' }}" 
+               placeholder="text-embedding-3-small" required>
+        <small class="help-block">{{_('Model name for embeddings (e.g., text-embedding-3-small)')}}</small>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_api_key">{{_('API Key')}}</label>
+        <input type="password" class="form-control" name="ai_api_key" id="ai_api_key" 
+               value="" placeholder="{{_('Enter API key (leave blank to keep existing)')}}" autocomplete="off">
+        <small class="help-block">{{_('Leave blank to keep existing API key. New key will replace current one.')}}</small>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_max_tokens_summary">{{_('Max Summary Tokens')}}</label>
+        <input type="number" min="100" max="2000" step="1" class="form-control" 
+               name="ai_max_tokens_summary" id="ai_max_tokens_summary" 
+               value="{{ content.config_ai_max_tokens_summary or 500 }}" required>
+        <small class="help-block">{{_('Maximum tokens for summary generation (100-2000)')}}</small>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_timeout_seconds">{{_('Request Timeout (seconds)')}}</label>
+        <input type="number" min="10" max="300" step="1" class="form-control" 
+               name="ai_timeout_seconds" id="ai_timeout_seconds" 
+               value="{{ content.config_ai_timeout_seconds or 60 }}" required>
+        <small class="help-block">{{_('Request timeout in seconds (10-300)')}}</small>
+      </div>
+
+      <div class="form-group">
+        <label for="ai_max_retries">{{_('Max Retries')}}</label>
+        <input type="number" min="0" max="10" step="1" class="form-control" 
+               name="ai_max_retries" id="ai_max_retries" 
+               value="{{ content.config_ai_max_retries or 3 }}" required>
+        <small class="help-block">{{_('Maximum retry attempts for failed API calls (0-10)')}}</small>
+      </div>
+
+      <hr>
+      <h3>{{_('Full Book Indexing')}}</h3>
+      <p class="text-muted">{{_('Configure full book indexing for deep search within book content.')}}</p>
+
+      <div class="form-group">
+        <label for="ai_full_index_enabled">{{_('Enable Full Book Indexing')}}</label>
+        <div class="checkbox">
+          <label>
+            <input type="checkbox" name="ai_full_index_enabled" id="ai_full_index_enabled" 
+                   {% if content.config_ai_full_index_enabled %}checked{% endif %}>
+            {{_('Enable full book indexing (chunking and embedding)')}}
+          </label>
+        </div>
+        <small class="help-block">{{_('When enabled, books can be fully indexed for deep search within passages and chapters.')}}</small>
+      </div>
+
+      <div id="full-index-settings-fields" {% if not content.config_ai_full_index_enabled %}style="display: none;"{% endif %}>
+        <div class="form-group">
+          <label for="ai_chunk_size_tokens">{{_('Chunk Size (tokens)')}}</label>
+          <input type="number" min="100" max="2000" step="50" class="form-control" 
+                 name="ai_chunk_size_tokens" id="ai_chunk_size_tokens" 
+                 value="{{ content.config_ai_chunk_size_tokens or 500 }}">
+          <small class="help-block">{{_('Target tokens per chunk (100-2000, default: 500)')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_chunk_overlap_tokens">{{_('Chunk Overlap (tokens)')}}</label>
+          <input type="number" min="0" max="200" step="10" class="form-control" 
+                 name="ai_chunk_overlap_tokens" id="ai_chunk_overlap_tokens" 
+                 value="{{ content.config_ai_chunk_overlap_tokens or 50 }}">
+          <small class="help-block">{{_('Overlap tokens between chunks for context continuity (0-200, default: 50)')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_max_chunks_per_book">{{_('Max Chunks per Book')}}</label>
+          <input type="number" min="100" max="50000" step="100" class="form-control" 
+                 name="ai_max_chunks_per_book" id="ai_max_chunks_per_book" 
+                 value="{{ content.config_ai_max_chunks_per_book or 5000 }}">
+          <small class="help-block">{{_('Safety limit for chunks per book (100-50000, default: 5000)')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_chunk_batch_size">{{_('Embedding Batch Size')}}</label>
+          <input type="number" min="1" max="100" step="1" class="form-control" 
+                 name="ai_chunk_batch_size" id="ai_chunk_batch_size" 
+                 value="{{ content.config_ai_chunk_batch_size or 25 }}">
+          <small class="help-block">{{_('Number of chunks to embed per API call (1-100, default: 25)')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_auto_index_on_summary">{{_('Auto-Index on Summary')}}</label>
+          <div class="checkbox">
+            <label>
+              <input type="checkbox" name="ai_auto_index_on_summary" id="ai_auto_index_on_summary" 
+                     {% if content.config_ai_auto_index_on_summary %}checked{% endif %}>
+              {{_('Automatically index books when summary is generated')}}
+            </label>
+          </div>
+          <small class="help-block">{{_('When enabled, books will be automatically indexed after summary generation.')}}</small>
+        </div>
+      </div>
+
+      <hr>
+      <h3>{{_('Book Chatbot')}}</h3>
+      <p class="text-muted">{{_('Configure the AI chatbot for asking questions about book content.')}}</p>
+
+      <div class="form-group">
+        <label for="ai_chatbot_enabled">{{_('Enable Book Chatbot')}}</label>
+        <div class="checkbox">
+          <label>
+            <input type="checkbox" name="ai_chatbot_enabled" id="ai_chatbot_enabled" 
+                   {% if content.config_ai_chatbot_enabled %}checked{% endif %}>
+            {{_('Enable book chatbot feature')}}
+          </label>
+        </div>
+        <small class="help-block">{{_('When enabled, users can ask questions about book content. Requires Full Book Indexing to be enabled.')}}</small>
+      </div>
+
+      <div id="chatbot-settings-fields" {% if not content.config_ai_chatbot_enabled %}style="display: none;"{% endif %}>
+        <div class="form-group">
+          <label for="ai_max_tokens_chatbot">{{_('Max Chatbot Tokens')}}</label>
+          <input type="number" min="100" max="2000" step="1" class="form-control" 
+                 name="ai_max_tokens_chatbot" id="ai_max_tokens_chatbot" 
+                 value="{{ content.config_ai_max_tokens_chatbot or 500 }}">
+          <small class="help-block">{{_('Maximum tokens in chatbot response (100-2000, default: 500)')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_chatbot_chunks_limit">{{_('Chunks Limit')}}</label>
+          <input type="number" min="1" max="20" step="1" class="form-control" 
+                 name="ai_chatbot_chunks_limit" id="ai_chatbot_chunks_limit" 
+                 value="{{ content.config_ai_chatbot_chunks_limit or 5 }}">
+          <small class="help-block">{{_('Number of book chunks to retrieve for context (1-20, default: 5)')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_chatbot_similarity_threshold">{{_('Similarity Threshold')}}</label>
+          <input type="number" min="0.0" max="1.0" step="0.1" class="form-control" 
+                 name="ai_chatbot_similarity_threshold" id="ai_chatbot_similarity_threshold" 
+                 value="{{ content.config_ai_chatbot_similarity_threshold or 0.3 }}">
+          <small class="help-block">{{_('Minimum similarity score for chunks to be included (0.0-1.0, default: 0.3). Lower values return more results but may be less relevant.')}}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="ai_chatbot_history_limit">{{_('Chat History Limit')}}</label>
+          <input type="number" min="0" max="20" step="1" class="form-control" 
+                 name="ai_chatbot_history_limit" id="ai_chatbot_history_limit" 
+                 value="{{ content.config_ai_chatbot_history_limit or 5 }}">
+          <small class="help-block">{{_('Number of previous exchanges to include in context (0-20, default: 5)')}}</small>
+        </div>
+      </div>
+    </div>
+
+    <button type="submit" name="submit" value="submit" class="btn btn-default">{{_('Save')}}</button>
+    <button type="submit" name="test" value="test" class="btn btn-default">{{_('Test Configuration')}}</button>
+    <a href="{{ url_for('admin.admin') }}" class="btn btn-default">{{_('Cancel')}}</a>
+  </form>
+</div>
+{% endblock %}
+{% block js %}
+<script>
+$(document).ready(function() {
+  // Show/hide AI settings fields based on enabled checkbox
+  $('#ai_enabled').change(function() {
+    if ($(this).is(':checked')) {
+      $('#ai-settings-fields').show();
+      $('#ai-settings-fields input, #ai-settings-fields select').prop('required', true);
+    } else {
+      $('#ai-settings-fields').hide();
+      $('#ai-settings-fields input, #ai-settings-fields select').prop('required', false);
+    }
+  });
+
+  // Show/hide full index settings based on enabled checkbox
+  $('#ai_full_index_enabled').change(function() {
+    if ($(this).is(':checked')) {
+      $('#full-index-settings-fields').show();
+      // Only make numeric inputs required (not checkboxes)
+      $('#full-index-settings-fields input[type="number"]').prop('required', true);
+    } else {
+      $('#full-index-settings-fields').hide();
+      // Remove required from all inputs when hidden
+      $('#full-index-settings-fields input').prop('required', false);
+    }
+  });
+  
+  // Show/hide chatbot settings based on enabled checkbox
+  $('#ai_chatbot_enabled').change(function() {
+    if ($(this).is(':checked')) {
+      $('#chatbot-settings-fields').show();
+      // Only make numeric inputs required (not checkboxes)
+      $('#chatbot-settings-fields input[type="number"]').prop('required', true);
+    } else {
+      $('#chatbot-settings-fields').hide();
+      // Remove required from all inputs when hidden
+      $('#chatbot-settings-fields input').prop('required', false);
+    }
+  });
+  
+  // Initialize: set required on numeric inputs if full indexing is enabled on page load
+  if ($('#ai_full_index_enabled').is(':checked')) {
+    $('#full-index-settings-fields input[type="number"]').prop('required', true);
+  }
+  
+  // Initialize: set required on numeric inputs if chatbot is enabled on page load
+  if ($('#ai_chatbot_enabled').is(':checked')) {
+    $('#chatbot-settings-fields input[type="number"]').prop('required', true);
+  }
+  
+  // On form submit, remove required from hidden fields to prevent validation errors
+  $('form').on('submit', function() {
+    if (!$('#ai_full_index_enabled').is(':checked')) {
+      $('#full-index-settings-fields input').prop('required', false);
+    }
+    if (!$('#ai_chatbot_enabled').is(':checked')) {
+      $('#chatbot-settings-fields input').prop('required', false);
+    }
+  });
+});
+</script>
+{% endblock %}
+

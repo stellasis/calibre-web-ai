@@ -42,7 +42,7 @@ except ImportError as e:
         oauth_support = False
 from sqlalchemy import create_engine, exc, exists, event, text
 from sqlalchemy import Column, ForeignKey
-from sqlalchemy import String, Integer, SmallInteger, Boolean, DateTime, Float, JSON
+from sqlalchemy import String, Integer, SmallInteger, Boolean, DateTime, Float, JSON, LargeBinary
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.sql.expression import func
 try:
@@ -564,6 +564,94 @@ class Thumbnail(Base):
     filename = Column(String, default=filename)
     generated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     expiration = Column(DateTime, nullable=True)
+
+
+# AI Models (Story 1.1)
+# Note: SQLite doesn't support schemas, so we use plain table names
+# When these tables are accessed via CalibreDB (which attaches databases as schemas),
+# SQLAlchemy will still work correctly, but the schema specification is ignored for SQLite
+class BookSummary(Base):
+    __tablename__ = 'book_summaries'
+    # Removed schema for SQLite compatibility - SQLite doesn't support schemas
+
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, nullable=False, index=True)
+    summary_text = Column(String, nullable=False)
+    model_name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __repr__(self):
+        return '<BookSummary %r>' % self.book_id
+
+
+class BookEmbedding(Base):
+    __tablename__ = 'book_embeddings'
+    # Removed schema for SQLite compatibility - SQLite doesn't support schemas
+
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, nullable=False, index=True)
+    vector = Column(LargeBinary, nullable=False)  # BLOB for binary float32 array
+    vector_dimension = Column(Integer, nullable=False)
+    model_name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __repr__(self):
+        return '<BookEmbedding %r>' % self.book_id
+
+
+class BookChunk(Base):
+    __tablename__ = 'book_chunks'
+    # Removed schema for SQLite compatibility - SQLite doesn't support schemas
+
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    chapter_title = Column(String, nullable=True)
+    chunk_text = Column(String, nullable=False)
+    token_count = Column(Integer, nullable=False)
+    start_position = Column(Integer, nullable=False)
+    end_position = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __repr__(self):
+        return '<BookChunk %r:%r>' % (self.book_id, self.chunk_index)
+
+
+class BookChunkEmbedding(Base):
+    __tablename__ = 'book_chunk_embeddings'
+    # Removed schema for SQLite compatibility - SQLite doesn't support schemas
+
+    id = Column(Integer, primary_key=True)
+    chunk_id = Column(Integer, ForeignKey('book_chunks.id', ondelete='CASCADE'), nullable=False, index=True)
+    book_id = Column(Integer, nullable=False, index=True)  # Denormalized for fast queries
+    vector = Column(LargeBinary, nullable=False)  # BLOB for binary float32 array
+    vector_dimension = Column(Integer, nullable=False)
+    model_name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __repr__(self):
+        return '<BookChunkEmbedding %r>' % self.chunk_id
+
+
+class BookIndexStatus(Base):
+    __tablename__ = 'book_index_status'
+    # Removed schema for SQLite compatibility - SQLite doesn't support schemas
+
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, nullable=False, unique=True, index=True)
+    status = Column(String, nullable=False, default='pending', index=True)  # 'pending', 'processing', 'completed', 'failed'
+    total_chunks = Column(Integer, default=0, nullable=False)
+    processed_chunks = Column(Integer, default=0, nullable=False)
+    error_message = Column(String, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __repr__(self):
+        return '<BookIndexStatus %r:%r>' % (self.book_id, self.status)
 
 
 # Add missing tables during migration of database

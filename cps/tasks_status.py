@@ -74,7 +74,26 @@ def render_task_status(tasklist):
                 else:
                     ret['status'] = _('Unknown Status')
 
-            ret['taskMessage'] = "{}: {}".format(task.name, task.message) if task.message else task.name
+            # Safely convert task.name to string (handles LazyString)
+            def safe_task_name(task_obj):
+                """Safely convert task name to string, handling LazyString."""
+                try:
+                    name = task_obj.name
+                    # Check for LazyString BEFORE calling str()
+                    if hasattr(name, '_message'):
+                        # It's a LazyString - access message directly
+                        msg = name._message
+                        if isinstance(msg, tuple) and len(msg) > 0:
+                            return str(msg[0])
+                        return str(msg)
+                    # Normal string conversion
+                    return str(name)
+                except (TypeError, AttributeError):
+                    # Fallback if conversion fails
+                    return "Task"
+            
+            task_name_str = safe_task_name(task)
+            ret['taskMessage'] = "{}: {}".format(task_name_str, task.message) if task.message else task_name_str
             ret['progress'] = "{} %".format(int(task.progress * 100))
             ret['user'] = escape(user)  # prevent xss
 

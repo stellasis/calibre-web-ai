@@ -41,6 +41,12 @@ log = logger.create()
 @login_required_if_no_ano
 def simple_search():
     term = request.args.get("query")
+    ai_mode = request.args.get("ai") == "1"
+    
+    # Check if AI search is requested and enabled
+    if ai_mode and term and config.config_ai_enabled:
+        return render_ai_search_results(term.strip())
+    
     if term:
         return redirect(url_for('web.books_list', data="search", sort_param='stored', query=term.strip()))
     else:
@@ -48,7 +54,9 @@ def simple_search():
                                      searchterm="",
                                      result_count=0,
                                      title=_("Search"),
-                                     page="search")
+                                     page="search",
+                                     ai_search=False,
+                                     ai_enabled=config.config_ai_enabled)
 
 
 @search.route("/advsearch", methods=['POST'])
@@ -425,6 +433,87 @@ def render_search_results(term, offset=None, order=None, limit=None):
                                  result_count=result_count,
                                  title=_("Search"),
                                  page="search",
-                                 order=order[1])
+                                 order=order[1] if order else None,
+                                 ai_search=False,
+                                 ai_enabled=config.config_ai_enabled)
+
+
+def render_ai_search_results(term):
+    """
+    Render AI semantic search results.
+    
+    Args:
+        term: Search query
+    
+    Returns:
+        Rendered template with AI search results
+    """
+    if not term:
+        return render_title_template('search.html',
+                                     searchterm="",
+                                     result_count=0,
+                                     title=_("AI Search"),
+                                     page="search",
+                                     ai_search=True,
+                                     ai_enabled=True)
+    
+    try:
+        from .ai.search import semantic_search
+        
+        # Perform semantic search
+        results = semantic_search(term, limit=50)
+        
+        # Convert results to format expected by search template
+        # The template expects entries with a .Books attribute
+        entries = []
+        for result in results:
+            book = result.get('book')
+            if book:
+                # Create a namedtuple-like object that matches template expectations
+                class SearchEntry:
+                    def __init__(self, book, read_status=False, similarity=0.0):
+                        self.Books = book
+                        self._read_status = read_status
+                        self.similarity_score = similarity
+                    
+                    def __getitem__(self, key):
+                        if key == 0:
+                            return self.Books
+                        elif key == 2:
+                            return self._read_status
+                        return None
+                
+                entry = SearchEntry(
+                    book, 
+                    read_status=False,
+                    similarity=result.get('similarity_score', 0.0)
+                )
+                entries.append(entry)
+        
+        result_count = len(entries)
+        
+        return render_title_template('search.html',
+                                     searchterm=term,
+                                     pagination=None,
+                                     query=term,
+                                     adv_searchterm=term,
+                                     entries=entries,
+                                     result_count=result_count,
+                                     title=_("AI Search"),
+                                     page="search",
+                                     order=None,
+                                     ai_search=True,
+                                     ai_enabled=True)
+        
+    except Exception as e:
+        log.error("AI search failed: %s", e, exc_info=True)
+        flash(_("AI search failed: %(error)s", error=str(e)), category="error")
+        return render_title_template('search.html',
+                                     searchterm=term,
+                                     result_count=0,
+                                     title=_("AI Search"),
+                                     page="search",
+                                     ai_search=True,
+                                     ai_enabled=True)
 
 

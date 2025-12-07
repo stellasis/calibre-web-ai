@@ -47,7 +47,7 @@ from .gdriveutils import getFileFromEbooksFolder, do_gdrive_download
 from .helper import check_valid_domain, check_email, check_username, \
     get_book_cover, get_series_cover_thumbnail, get_download_link, send_mail, generate_random_password, \
     send_registration_mail, check_send_to_ereader, check_read_formats, tags_filters, reset_password, valid_email, \
-    edit_book_read_status, valid_password
+    edit_book_read_status, valid_password, get_cover_on_failure
 from .pagination import Pagination
 from .redirect import get_redirect_location
 from .cw_babel import get_available_locale
@@ -1153,9 +1153,34 @@ def category_list():
 # ################################### Download/Send ##################################################################
 
 
+def cover_login_required(func):
+    """
+    Custom auth decorator for cover endpoints.
+    Returns generic cover on auth failure instead of redirecting to login.
+    This prevents redirect loops when loading cover images.
+    """
+    @wraps(func)
+    def decorated_view(*args, **kwargs):
+        if config.config_allow_reverse_proxy_header_login:
+            from .usermanagement import load_user_from_reverse_proxy_header
+            user = load_user_from_reverse_proxy_header(request)
+            if user:
+                g.flask_httpauth_user = user
+                return func(*args, **kwargs)
+            g.flask_httpauth_user = None
+        if config.config_anonbrowse == 1:
+            return func(*args, **kwargs)
+        # Check if user is authenticated
+        if current_user.is_authenticated:
+            return func(*args, **kwargs)
+        # Return generic cover instead of redirecting for image requests
+        return get_cover_on_failure()
+    return decorated_view
+
+
 @web.route("/cover/<int:book_id>")
 @web.route("/cover/<int:book_id>/<string:resolution>")
-@login_required_if_no_ano
+@cover_login_required
 def get_cover(book_id, resolution=None):
     resolutions = {
         'og': constants.COVER_THUMBNAIL_ORIGINAL,
@@ -1169,7 +1194,7 @@ def get_cover(book_id, resolution=None):
 
 @web.route("/series_cover/<int:series_id>")
 @web.route("/series_cover/<int:series_id>/<string:resolution>")
-@login_required_if_no_ano
+@cover_login_required
 def get_series_cover(series_id, resolution=None):
     resolutions = {
         'og': constants.COVER_THUMBNAIL_ORIGINAL,
@@ -1665,15 +1690,161 @@ def show_book(book_id):
             if media_format.format.lower() in constants.EXTENSIONS_AUDIO:
                 entry.audio_entries.append(media_format.format.lower())
 
+        # Get AI summary if available (Story 2.4)
+        ai_summary = None
+        has_embedding = False
+        similar_books = []
+        index_status = None
+        if config.config_ai_enabled:
+            try:
+                ai_summary = ub.session.query(ub.BookSummary).filter(
+                    ub.BookSummary.book_id == book_id
+                ).first()
+            except Exception as e:
+                log.warning("Error fetching AI summary: %s", e)
+            
+            # Check if embedding exists and get similar books
+            try:
+                from .ai.embeddings import embedding_exists
+                from .ai.search import similar_books as get_similar
+                has_embedding = embedding_exists(book_id)
+                
+                # Get similar books if embedding exists
+                # Keep full results with similarity scores for display
+                # Filter out books with non-positive similarity scores
+                if has_embedding:
+                    similar_results = get_similar(book_id, limit=8)
+                    similar_books = [
+                        {
+                            'book': r['book'],
+                            'score': r.get('similarity_score', 0.0)
+                        }
+                        for r in similar_results 
+                        if r.get('book') and r.get('similarity_score', 0.0) > 0
+                    ]
+            except Exception as e:
+                log.warning("Error checking embedding/similar books: %s", e)
+            
+            # Get full book indexing status
+            index_status = None
+            ai_full_index_enabled = getattr(config, 'config_ai_full_index_enabled', False)
+            if ai_full_index_enabled:
+                try:
+                    from .ub import BookIndexStatus
+                    index_status = ub.session.query(BookIndexStatus).filter_by(book_id=book_id).first()
+                except Exception as e:
+                    # Table might not exist if migration hasn't been run yet
+                    log.debug("Index status not available: %s", e)
+                    index_status = None
+            
+            # Check chatbot availability
+            chatbot_available = False
+            if getattr(config, 'config_ai_chatbot_enabled', False):
+                try:
+                    from .ai.chatbot import _check_book_indexed
+                    chatbot_available = _check_book_indexed(book_id)
+                except Exception as e:
+                    log.debug("Chatbot availability check failed: %s", e)
+                    chatbot_available = False
+        else:
+            ai_full_index_enabled = False
+            chatbot_available = False
+
         return render_title_template('detail.html',
                                      entry=entry,
                                      cc=cc,
                                      is_xhr=request.headers.get('X-Requested-With') == 'XMLHttpRequest',
                                      title=entry.title,
                                      books_shelfs=book_in_shelves,
+                                     ai_summary=ai_summary,
+                                     has_embedding=has_embedding,
+                                     similar_books=similar_books,
+                                     index_status=index_status,
+                                     ai_full_index_enabled=ai_full_index_enabled,
+                                     chatbot_available=chatbot_available,
+                                     config=config,
                                      page="book")
     else:
         log.debug("Selected book is unavailable. File does not exist or is not accessible")
         flash(_("Oops! Selected book is unavailable. File does not exist or is not accessible"),
               category="error")
         return redirect(url_for("web.index"))
+
+
+# ################################### AI Similar Books API ###################################################
+
+
+@web.route("/api/ai/similar/<int:book_id>", methods=['GET'])
+@login_required_if_no_ano
+def get_similar_books(book_id):
+    """
+    API endpoint to fetch similar books for a given book.
+    Uses embedding similarity to find similar books.
+    
+    Returns:
+        JSON with similar_books array or error message
+    """
+    # Check if AI is enabled
+    if not config.config_ai_enabled:
+        return jsonify({'error': 'AI features disabled'}), 403
+    
+    # Validate book exists
+    book = calibre_db.get_book(book_id)
+    if not book:
+        return jsonify({'error': 'Book not found'}), 404
+    
+    # Check if embedding exists
+    try:
+        from .ai.embeddings import embedding_exists
+        has_embedding = embedding_exists(book_id)
+    except Exception as e:
+        log.error("Error checking embedding existence: %s", e)
+        return jsonify({'error': 'Failed to check embedding status'}), 500
+    
+    if not has_embedding:
+        return jsonify({
+            'similar_books': [],
+            'message': 'No embedding available. Generate a summary first.'
+        })
+    
+    # Get similar books
+    try:
+        from .ai.search import similar_books
+        results = similar_books(book_id, limit=8)
+    except Exception as e:
+        log.error("Failed to fetch similar books for book %d: %s", book_id, e)
+        return jsonify({'error': 'Failed to fetch similar books'}), 500
+    
+    # Format response - filter out books with non-positive similarity scores
+    similar_books_list = []
+    for result in results:
+        book_obj = result.get('book')
+        score = result.get('similarity_score', 0.0)
+        if book_obj and score > 0:
+            # Format authors with IDs for proper linking
+            authors_list = []
+            if book_obj.authors:
+                for author in book_obj.authors:
+                    authors_list.append({
+                        'id': author.id,
+                        'name': author.name.replace('|', ',')
+                    })
+            
+            # Get last_modified timestamp for cache-busting
+            last_modified_ts = None
+            if hasattr(book_obj, 'last_modified') and book_obj.last_modified:
+                import time
+                last_modified_ts = str(int(book_obj.last_modified.timestamp()))
+            
+            similar_books_list.append({
+                'book_id': result['book_id'],
+                'similarity_score': score,
+                'book': {
+                    'id': book_obj.id,
+                    'title': book_obj.title,
+                    'authors': authors_list,
+                    'last_modified': last_modified_ts,
+                }
+            })
+    
+    return jsonify({'similar_books': similar_books_list})

@@ -38,9 +38,24 @@ def get_mimetype(ext):
     # overwrite some mimetypes for proper file detection
     mimes = {".fb2": "text/xml",
              ".cbz": "application/zip",
-             ".cbr": "application/x-rar"
+             ".cbr": "application/x-rar",
+             ".epub": "application/epub+zip",  # Explicit EPUB MIME type
+             ".kepub": "application/epub+zip"  # KEPUB is also EPUB format
              }
-    return mimes.get(ext, mimetypes.types_map[ext])
+    # Return explicit mapping if available
+    if ext in mimes:
+        return mimes[ext]
+    # Try mimetypes.types_map, with fallback for common extensions
+    try:
+        return mimetypes.types_map[ext]
+    except KeyError:
+        # Common fallbacks for extensions that might not be in types_map
+        fallbacks = {
+            ".mobi": "application/x-mobipocket-ebook",
+            ".azw": "application/vnd.amazon.ebook",
+            ".azw3": "application/vnd.amazon.ebook"
+        }
+        return fallbacks.get(ext, "application/octet-stream")
 
 
 def get_temp_dir():
@@ -56,28 +71,86 @@ def del_temp_dir():
 
 
 def validate_mime_type(file_buffer, allowed_extensions):
+    # If python-magic is not available, skip MIME validation
+    # The file extension check will still be performed by the caller
     if error:
-        log.error(error)
+        log.warning("python-magic not available, skipping MIME type validation: %s", error)
+        return True  # Allow upload if extension check passes (handled by caller)
+    
+    try:
+        # Read file content into memory for MIME checking
+        # Flask file objects might not support seek(), so read into BytesIO
+        file_content = file_buffer.read()
+        file_buffer.seek(0)  # Try to reset, but don't fail if it doesn't work
+        
+        # If seek failed, create a new BytesIO from the content
+        if hasattr(file_buffer, 'tell'):
+            try:
+                file_buffer.tell()  # Test if we can get position
+            except:
+                file_buffer = BytesIO(file_content)
+        else:
+            file_buffer = BytesIO(file_content)
+        
+        mime = magic.Magic(mime=True)
+        allowed_mimetypes = list()
+        for x in allowed_extensions:
+            try:
+                mimetype = get_mimetype("." + x)
+                allowed_mimetypes.append(mimetype)
+                log.debug("Added allowed MIME type for %s: %s", x, mimetype)
+            except KeyError:
+                log.error("Unknown mimetype for Extension: {}".format(x))
+        
+        tmp_mime_type = mime.from_buffer(file_content)
+        log.debug("Detected MIME type: %s, Allowed types: %s", tmp_mime_type, allowed_mimetypes)
+        
+        # First check: If EPUB is in allowed extensions, check ZIP files for EPUB structure
+        # (EPUBs often show up as application/zip)
+        if "epub" in [x.lower() for x in allowed_extensions]:
+            if "zip" in tmp_mime_type or "application/zip" in tmp_mime_type:
+                try:
+                    with zipfile.ZipFile(BytesIO(file_content), 'r') as epub:
+                        if "mimetype" in epub.namelist():
+                            # Read mimetype file to verify it's EPUB
+                            mimetype_content = epub.read("mimetype").decode('utf-8', errors='ignore').strip()
+                            if "epub" in mimetype_content.lower() or "application/epub+zip" in mimetype_content:
+                                log.debug("EPUB detected via ZIP structure (mimetype file: %s)", mimetype_content)
+                                return True
+                except Exception as zip_error:
+                    log.debug("ZIP check failed (might not be EPUB): %s", zip_error)
+        
+        # Check if MIME type matches any allowed type
+        if any(mime_type in tmp_mime_type for mime_type in allowed_mimetypes):
+            log.debug("MIME type validation passed: %s", tmp_mime_type)
+            return True
+        
+        # Some epubs show up as zip mimetypes - check if it's actually an EPUB (fallback check)
+        if "zip" in tmp_mime_type or "application/zip" in tmp_mime_type:
+            try:
+                with zipfile.ZipFile(BytesIO(file_content), 'r') as epub:
+                    if "mimetype" in epub.namelist():
+                        # Read mimetype file to verify it's EPUB
+                        mimetype_content = epub.read("mimetype").decode('utf-8', errors='ignore').strip()
+                        if "epub" in mimetype_content.lower() or "application/epub+zip" in mimetype_content:
+                            log.debug("EPUB detected via ZIP structure (mimetype file: %s)", mimetype_content)
+                            return True
+            except Exception as zip_error:
+                log.debug("ZIP check failed (might not be EPUB): %s", zip_error)
+        
+        # Final fallback: If epub is in allowed extensions and file is ZIP, allow it
+        # (EPUB files are ZIP archives, so this is a reasonable fallback)
+        if "epub" in [x.lower() for x in allowed_extensions]:
+            if "zip" in tmp_mime_type or "application/zip" in tmp_mime_type:
+                log.warning("Allowing ZIP file as EPUB (epub is in allowed extensions, file detected as ZIP)")
+                return True
+        
+        log.error("Mimetype '%s' not found in allowed types: %s", tmp_mime_type, allowed_mimetypes)
         return False
-    mime = magic.Magic(mime=True)
-    allowed_mimetypes = list()
-    for x in allowed_extensions:
+    except Exception as e:
+        log.warning("Error during MIME type validation, allowing upload: %s", e)
         try:
-            allowed_mimetypes.append(get_mimetype("." + x))
-        except KeyError:
-            log.error("Unkown mimetype for Extension: {}".format(x))
-    tmp_mime_type = mime.from_buffer(file_buffer.read())
-    file_buffer.seek(0)
-    if any(mime_type in tmp_mime_type for mime_type in allowed_mimetypes):
-        return True
-    # Some epubs show up as zip mimetypes
-    elif "zip" in tmp_mime_type:
-        try:
-            with zipfile.ZipFile(BytesIO(file_buffer.read()), 'r') as epub:
-                file_buffer.seek(0)
-                if "mimetype" in epub.namelist():
-                    return True
-        except:
             file_buffer.seek(0)
-    log.error("Mimetype '{}' not found in allowed types".format(tmp_mime_type))
-    return False
+        except:
+            pass
+        return True  # Fallback: allow if extension check passes

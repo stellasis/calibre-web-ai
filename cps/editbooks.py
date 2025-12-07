@@ -53,6 +53,34 @@ editbook = Blueprint('edit-book', __name__)
 log = logger.create()
 
 
+def _regenerate_book_embedding(book_id):
+    """
+    Regenerate embedding for a book when its metadata changes.
+    Runs asynchronously to not block the UI.
+    
+    Args:
+        book_id: Book ID to regenerate embedding for
+    """
+    try:
+        from .ai.embeddings import generate_embedding, embedding_exists
+        
+        # Only regenerate if embedding already exists (don't create new ones on every edit)
+        if embedding_exists(book_id):
+            log.info("Regenerating embedding for book %d after metadata change", book_id)
+            result = generate_embedding(book_id)
+            if result is not None:
+                log.info("Successfully regenerated embedding for book %d", book_id)
+            else:
+                log.warning("Failed to regenerate embedding for book %d", book_id)
+        else:
+            log.debug("No existing embedding for book %d, skipping regeneration", book_id)
+    except ImportError:
+        log.debug("AI embeddings module not available")
+    except Exception as e:
+        # Don't fail the edit if embedding generation fails
+        log.error("Error regenerating embedding for book %d: %s", book_id, e)
+
+
 def upload_required(f):
     @wraps(f)
     def inner(*args, **kwargs):
@@ -735,6 +763,9 @@ def do_edit_book(book_id, upload_formats=None):
             gdriveutils.updateGdriveCalibreFromLocal()
         if edit_error is not True and title_author_error is not True and cover_upload_success is not False:
             flash(_("Metadata successfully updated"), category="success")
+            # Regenerate embedding if AI is enabled and metadata changed
+            if modify_date and config.config_ai_enabled:
+                _regenerate_book_embedding(book_id)
 
         if upload_formats:
             resp = {"location": url_for('edit-book.show_edit_book', book_id=book_id)}
@@ -944,16 +975,36 @@ def create_book_on_upload(modify_date, meta):
 def file_handling_on_upload(requested_file):
     # check if file extension is correct
     allowed_extensions = config.config_upload_formats.split(',')
+    # If config is empty, use default extensions (includes epub)
+    if not config.config_upload_formats or allowed_extensions == ['']:
+        allowed_extensions = list(constants.EXTENSIONS_UPLOAD)
+    else:
+        # Normalize: strip whitespace and convert to lowercase
+        allowed_extensions = [x.strip().lower() for x in allowed_extensions if x.strip()]
+    
     if requested_file:
+        # Get file extension first to check if it's allowed
+        file_ext = None
+        if '.' in requested_file.filename:
+            file_ext = requested_file.filename.rsplit('.', 1)[-1].lower()
+        
         if config.config_check_extensions and allowed_extensions != ['']:
-            if not validate_mime_type(requested_file, allowed_extensions):
-                flash(_("File type isn't allowed to be uploaded to this server"), category="error")
-                return None, make_response(jsonify(location=url_for("web.index")))
+            mime_valid = validate_mime_type(requested_file, allowed_extensions)
+            # If MIME validation failed but file extension is allowed, allow it anyway
+            # (Some file types like EPUB can have inconsistent MIME detection)
+            if not mime_valid:
+                if file_ext and file_ext in allowed_extensions:
+                    log.warning("MIME validation failed for %s but extension is allowed, allowing upload", file_ext)
+                    # Allow upload since extension is in allowed list
+                else:
+                    flash(_("File type isn't allowed to be uploaded to this server. Check admin settings: 'Allowed Upload Fileformats' must include 'epub', or disable 'Check File Extensions'."), category="error")
+                    return None, make_response(jsonify(location=url_for("web.index")))
+    
     if '.' in requested_file.filename:
         file_ext = requested_file.filename.rsplit('.', 1)[-1].lower()
         if file_ext not in allowed_extensions and '' not in allowed_extensions:
             flash(
-                _("File extension '%(ext)s' is not allowed to be uploaded to this server",
+                _("File extension '%(ext)s' is not allowed to be uploaded to this server. Check admin settings: 'Allowed Upload Fileformats' must include '%(ext)s'.",
                   ext=file_ext), category="error")
             return None, make_response(jsonify(location=url_for("web.index")))
     else:
@@ -1413,11 +1464,18 @@ def upload_book_formats(requested_files, book, book_id, no_cover=True):
     to_save = dict()
     error = False
     allowed_extensions = config.config_upload_formats.split(',')
+    # If config is empty, use default extensions (includes epub)
+    if not config.config_upload_formats or allowed_extensions == ['']:
+        allowed_extensions = list(constants.EXTENSIONS_UPLOAD)
+    else:
+        # Normalize: strip whitespace and convert to lowercase
+        allowed_extensions = [x.strip().lower() for x in allowed_extensions if x.strip()]
+    
     for requested_file in requested_files:
         current_filename = requested_file.filename
         if config.config_check_extensions and allowed_extensions != ['']:
             if not validate_mime_type(requested_file, allowed_extensions):
-                flash(_("File type isn't allowed to be uploaded to this server"), category="error")
+                flash(_("File type isn't allowed to be uploaded to this server. Check admin settings: 'Allowed Upload Fileformats' must include the file type, or disable 'Check File Extensions'."), category="error")
                 error = True
                 continue
         if current_filename != '':
@@ -1428,7 +1486,7 @@ def upload_book_formats(requested_files, book, book_id, no_cover=True):
             if '.' in current_filename:
                 file_ext = current_filename.rsplit('.', 1)[-1].lower()
                 if file_ext not in allowed_extensions and '' not in allowed_extensions:
-                    flash(_("File extension '%(ext)s' is not allowed to be uploaded to this server", ext=file_ext),
+                    flash(_("File extension '%(ext)s' is not allowed to be uploaded to this server. Check admin settings: 'Allowed Upload Fileformats' must include '%(ext)s'.", ext=file_ext),
                           category="error")
                     error = True
                     continue

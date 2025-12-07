@@ -112,9 +112,9 @@ workflow_status:
 
   # Phase 3: Implementation
   sprint-planning:
-    status: "required"
+    status: "docs/sprint-artifacts/sprint-status.yaml"
     agent: "sm"
     command: "sprint-planning"
     phase: 3
-    note: "Creates sprint plan with stories"
+    note: "Sprint plan created for Epics 1-5, Epic 3 implementation in progress"
 
