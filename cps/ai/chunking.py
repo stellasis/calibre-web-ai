@@ -2,7 +2,11 @@
 
 """
 Book chunking service for full book indexing.
-Splits books into semantic chunks for embedding and search.
+
+Splits books into chunks for embedding and search.
+EPUB: chapter/spine ranges are hard boundaries (no cross-chapter chunks);
+      within a chapter, paragraph packing + overlap still applies.
+PDF/TXT: flat paragraph packing + overlap (no chapter structure).
 """
 
 import os
@@ -236,9 +240,11 @@ def extract_full_epub_text(epub_path: str) -> Tuple[str, List[Tuple[str, int, in
                         full_text += chapter_text + "\n\n"
                         chapter_end = len(full_text)
                         extracted_chapters += 1
-                        
-                        if chapter_title:
-                            chapters.append((chapter_title, chapter_start, chapter_end))
+                        # Always record a spine segment so chunking can respect
+                        # chapter boundaries (title optional; fall back to idref).
+                        if not chapter_title:
+                            chapter_title = idref or f"Section {extracted_chapters}"
+                        chapters.append((chapter_title, chapter_start, chapter_end))
                         log.debug("EPUB: Extracted chapter '%s' (%d chars)", idref, len(chapter_text))
                     else:
                         log.warning("EPUB: Chapter '%s' extracted but text is empty", idref)
@@ -327,6 +333,62 @@ def get_chapter_title_for_position(position: int, chapters: List[Tuple[str, int,
         if start <= position < end:
             return title
     return None
+
+
+def split_text_within_chapters(
+    full_text: str,
+    chapters: List[Tuple[str, int, int]],
+    chunk_size_tokens: int = DEFAULT_CHUNK_SIZE_TOKENS,
+    chunk_overlap_tokens: int = DEFAULT_CHUNK_OVERLAP_TOKENS,
+) -> List[Dict[str, any]]:
+    """
+    Split book text per chapter so chunks never cross chapter boundaries.
+
+    Within a chapter, reuse paragraph packing + overlap. Overlap does not
+    span from one chapter into the next. Falls back to flat split when no
+    chapter ranges are available (PDF/TXT, or EPUB with no spine segments).
+    """
+    if not full_text:
+        return []
+    if not chapters:
+        return split_text_into_chunks(full_text, chunk_size_tokens, chunk_overlap_tokens)
+
+    chunk_data: List[Dict[str, any]] = []
+    chunk_index = 0
+
+    for title, start, end in chapters:
+        start = max(0, start)
+        end = min(len(full_text), end)
+        if start >= end:
+            continue
+
+        chapter_text = full_text[start:end]
+        if not chapter_text.strip():
+            continue
+
+        sub_chunks = split_text_into_chunks(
+            chapter_text, chunk_size_tokens, chunk_overlap_tokens
+        )
+        for sub in sub_chunks:
+            local_start = sub.get('start_pos', 0) or 0
+            local_end = sub.get('end_pos', local_start + len(sub.get('text', '')))
+            chunk_data.append({
+                'text': sub['text'],
+                'start_pos': start + local_start,
+                'end_pos': start + local_end,
+                'token_count': sub['token_count'],
+                'chunk_index': chunk_index,
+                'chapter_title': title,
+            })
+            chunk_index += 1
+            if chunk_index >= MAX_CHUNKS_PER_BOOK:
+                log.warning(
+                    "Reached maximum chunks limit (%d) while chapter-chunking",
+                    MAX_CHUNKS_PER_BOOK,
+                )
+                return chunk_data
+
+    return chunk_data
 
 
 def chunk_book(book_id: int) -> List[int]:
@@ -433,9 +495,19 @@ def chunk_book(book_id: int) -> List[int]:
             else:
                 raise ValueError(f"No supported format found for book {book_id}. Book has no available formats.")
         
-        # Split into chunks
-        chunk_data = split_text_into_chunks(full_text, chunk_size, chunk_overlap)
-        
+        # Split into chunks. EPUB with spine segments: never cross chapters.
+        # PDF/TXT (no chapters): same flat paragraph pack as before.
+        if chapters:
+            log.info(
+                "Chapter-aware chunking for book %d (%d chapter ranges)",
+                book_id, len(chapters),
+            )
+            chunk_data = split_text_within_chapters(
+                full_text, chapters, chunk_size, chunk_overlap
+            )
+        else:
+            chunk_data = split_text_into_chunks(full_text, chunk_size, chunk_overlap)
+
         if len(chunk_data) > max_chunks:
             log.warning("Book %d has %d chunks, limiting to %d", book_id, len(chunk_data), max_chunks)
             chunk_data = chunk_data[:max_chunks]
@@ -445,9 +517,8 @@ def chunk_book(book_id: int) -> List[int]:
         
         # Store chunks in database
         for chunk_info in chunk_data:
-            # Get chapter title if available
-            chapter_title = None
-            if chapters:
+            chapter_title = chunk_info.get('chapter_title')
+            if chapter_title is None and chapters:
                 chapter_title = get_chapter_title_for_position(
                     chunk_info['start_pos'],
                     chapters
