@@ -1,5 +1,7 @@
 # Calibre-Web
 
+> **stellasis fork:** see [FORK.md](./FORK.md) for remotes, chapter-aware chunking, and tests. Upstream AI: [bluesam1/calibre-web-ai](https://github.com/bluesam1/calibre-web-ai).
+
 Calibre-Web is a web app that offers a clean and intuitive interface for browsing, reading, and downloading eBooks using a valid [Calibre](https://calibre-ebook.com) database.
 
 [![License](https://img.shields.io/github/license/janeczku/calibre-web?style=flat-square)](https://github.com/janeczku/calibre-web/blob/master/LICENSE)
