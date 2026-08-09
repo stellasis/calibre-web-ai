@@ -1,0 +1,30 @@
+---
+description: Require tests alongside behaviour-changing code
+alwaysApply: true
+---
+
+# Tests with code changes
+
+When you change **behaviour** (logic, APIs, chunking, RAG, indexing, auth gates), add or update tests in the **same change**.
+
+## What to test
+
+- Prefer **unit tests** for pure helpers (no Flask app, no LLM/API key, no network).
+- Cover the failure you care about (e.g. chunks must not cross chapter boundaries).
+- Skip full embed/Ask integration unless the task explicitly needs it (costs key + flaky).
+
+## Where / how
+
+- Place under `test/unit/` (pattern `test_*.py`).
+- Run:
+
+```bash
+PYTHONPATH=. python3 -m unittest discover -s test/unit -p 'test_*.py' -v
+```
+
+## Exceptions (say so in the PR/commit)
+
+- Docs-only, comments, pure renames with no logic change.
+- Deploy/ops patches that intentionally stay out of the fork.
+
+Do not ship behaviour changes with “tests later” unless the user explicitly defers them.
