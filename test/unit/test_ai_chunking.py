@@ -24,9 +24,13 @@ def _load_chunking_module():
     if "cps.ai.chunking" in sys.modules:
         return sys.modules["cps.ai.chunking"]
 
-    # Third-party imports used at module import time
+    # Prefer real lxml/chardet (needed for EPUB extract tests). Stub only if missing.
     for name in ("chardet", "lxml", "lxml.etree", "lxml.html"):
-        if name not in sys.modules:
+        if name in sys.modules:
+            continue
+        try:
+            __import__(name)
+        except ImportError:
             sys.modules[name] = types.ModuleType(name)
 
     cps = types.ModuleType("cps")
@@ -59,10 +63,37 @@ def _load_chunking_module():
     return mod
 
 
+FIXTURE_EPUB = ROOT / "test" / "fixtures" / "mini_two_chapter.epub"
+
+
 class TestSplitTextWithinChapters(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.chunking = _load_chunking_module()
+
+    def test_fixture_epub_chapters_do_not_cross(self):
+        """Real EPUB zip (original text) → extract → chapter-aware split."""
+        self.assertTrue(FIXTURE_EPUB.is_file(), f"missing fixture {FIXTURE_EPUB}")
+        full_text, chapters = self.chunking.extract_full_epub_text(str(FIXTURE_EPUB))
+        self.assertTrue(full_text.strip())
+        self.assertGreaterEqual(len(chapters), 2)
+
+        chunks = self.chunking.split_text_within_chapters(
+            full_text, chapters, chunk_size_tokens=40, chunk_overlap_tokens=5
+        )
+        self.assertTrue(chunks)
+
+        river_chunks = [c for c in chunks if "SIGNAL_RIVER" in c["text"]]
+        lantern_chunks = [c for c in chunks if "SIGNAL_LANTERN" in c["text"]]
+        self.assertTrue(river_chunks, "expected SIGNAL_RIVER in chapter 1 chunks")
+        self.assertTrue(lantern_chunks, "expected SIGNAL_LANTERN in chapter 2 chunks")
+
+        for c in river_chunks:
+            self.assertNotIn("SIGNAL_LANTERN", c["text"])
+            self.assertIn("Map Room", c["chapter_title"] or "")
+        for c in lantern_chunks:
+            self.assertNotIn("SIGNAL_RIVER", c["text"])
+            self.assertIn("Orchard Gate", c["chapter_title"] or "")
 
     def test_no_chapters_matches_flat_split(self):
         text = "Para one.\n\nPara two.\n\nPara three.\n\n"
