@@ -63,7 +63,11 @@ def _load_chunking_module():
     return mod
 
 
-FIXTURE_EPUB = ROOT / "test" / "fixtures" / "mini_two_chapter.epub"
+# Project Gutenberg #84 (public domain in the USA), EPUB no-images.
+FIXTURE_EPUB = ROOT / "test" / "fixtures" / "pg84_frankenstein.epub"
+# Distinctive phrases from Chapter 1 vs Chapter 2 (exact title match).
+CH1_MARKER = "I am by birth a Genevese"
+CH2_MARKER = "Harmony was the soul of our companionship"
 
 
 class TestSplitTextWithinChapters(unittest.TestCase):
@@ -72,28 +76,36 @@ class TestSplitTextWithinChapters(unittest.TestCase):
         cls.chunking = _load_chunking_module()
 
     def test_fixture_epub_chapters_do_not_cross(self):
-        """Real EPUB zip (original text) → extract → chapter-aware split."""
+        """Gutenberg EPUB → extract → chapter-aware split (Ch1 vs Ch2)."""
         self.assertTrue(FIXTURE_EPUB.is_file(), f"missing fixture {FIXTURE_EPUB}")
         full_text, chapters = self.chunking.extract_full_epub_text(str(FIXTURE_EPUB))
         self.assertTrue(full_text.strip())
-        self.assertGreaterEqual(len(chapters), 2)
+
+        # Exact titles only (avoid matching "Chapter 10", etc.)
+        named = {t.strip(): (t, s, e) for t, s, e in chapters}
+        self.assertIn("Chapter 1", named)
+        self.assertIn("Chapter 2", named)
+        ch1 = [named["Chapter 1"]]
+        ch2 = [named["Chapter 2"]]
+        self.assertIn(CH1_MARKER, full_text[ch1[0][1]:ch1[0][2]])
+        self.assertIn(CH2_MARKER, full_text[ch2[0][1]:ch2[0][2]])
 
         chunks = self.chunking.split_text_within_chapters(
-            full_text, chapters, chunk_size_tokens=40, chunk_overlap_tokens=5
+            full_text, chapters, chunk_size_tokens=80, chunk_overlap_tokens=10
         )
         self.assertTrue(chunks)
 
-        river_chunks = [c for c in chunks if "SIGNAL_RIVER" in c["text"]]
-        lantern_chunks = [c for c in chunks if "SIGNAL_LANTERN" in c["text"]]
-        self.assertTrue(river_chunks, "expected SIGNAL_RIVER in chapter 1 chunks")
-        self.assertTrue(lantern_chunks, "expected SIGNAL_LANTERN in chapter 2 chunks")
+        ch1_chunks = [c for c in chunks if (c.get("chapter_title") or "").strip() == "Chapter 1"]
+        ch2_chunks = [c for c in chunks if (c.get("chapter_title") or "").strip() == "Chapter 2"]
+        self.assertTrue(ch1_chunks)
+        self.assertTrue(ch2_chunks)
 
-        for c in river_chunks:
-            self.assertNotIn("SIGNAL_LANTERN", c["text"])
-            self.assertIn("Map Room", c["chapter_title"] or "")
-        for c in lantern_chunks:
-            self.assertNotIn("SIGNAL_RIVER", c["text"])
-            self.assertIn("Orchard Gate", c["chapter_title"] or "")
+        ch1_text = "\n".join(c["text"] for c in ch1_chunks)
+        ch2_text = "\n".join(c["text"] for c in ch2_chunks)
+        self.assertIn(CH1_MARKER, ch1_text)
+        self.assertIn(CH2_MARKER, ch2_text)
+        self.assertNotIn(CH2_MARKER, ch1_text)
+        self.assertNotIn(CH1_MARKER, ch2_text)
 
     def test_no_chapters_matches_flat_split(self):
         text = "Para one.\n\nPara two.\n\nPara three.\n\n"

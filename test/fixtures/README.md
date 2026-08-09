@@ -1,12 +1,17 @@
 # Test fixtures
 
-## `mini_two_chapter.epub`
+## `pg84_frankenstein.epub`
 
-Tiny **original** 2-chapter EPUB for chunking tests (not copied from a library book).
+[Project Gutenberg #84](https://www.gutenberg.org/ebooks/84) — *Frankenstein* (Shelley).  
+Public domain in the USA. Downloaded as **EPUB (no images)**.
 
-| Chapter | Marker phrases |
-|---------|----------------|
-| 1 Map Room | `SIGNAL_RIVER` |
-| 2 Orchard Gate | `SIGNAL_LANTERN` |
+Used to exercise real spine/chapter extraction + chapter-aware chunking  
+(Chapter 1 vs Chapter 2 markers in `test/unit/test_ai_chunking.py`).
 
-Regenerate with the script in git history / ask the agent — keep markers stable if tests assert them.
+Re-download:
+
+```bash
+curl -fsSL -A 'calibre-web-ai-tests/1.0' \
+  -o test/fixtures/pg84_frankenstein.epub \
+  'https://www.gutenberg.org/ebooks/84.epub.noimages'
+```
