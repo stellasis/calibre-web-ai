@@ -33,3 +33,9 @@ PYTHONPATH=. python3 -m unittest discover -s test/unit -p 'test_*.py' -v
 Open PRs against **bluesam1/calibre-web-ai** for AI/indexing changes. Vanilla Calibre-Web issues/PRs belong on janeczku.
 
 After indexing logic changes, existing full-book indexes may need a **re-index** so chunk boundaries match the new rules.
+
+## Releases
+
+| Tag | Date | Recall |
+|-----|------|--------|
+| [v0.1.0](https://github.com/stellasis/calibre-web-ai/releases/tag/v0.1.0) | 2026-08-12 | First tagged snapshot vs bluesam1. EPUB chunks stay inside chapters. Re-index EPUBs after this. |
